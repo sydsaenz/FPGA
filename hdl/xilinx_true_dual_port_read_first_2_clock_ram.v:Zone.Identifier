@@ -1,0 +1,4 @@
+[ZoneTransfer]
+ZoneId=3
+ReferrerUrl=https://fpga.mit.edu/6205/F25/assignments/week03/uart_wav_down
+HostUrl=https://fpga.mit.edu/6205/_static/F25/default_files/week03/xilinx_true_dual_port_read_first_2_clock_ram.v

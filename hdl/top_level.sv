@@ -1,0 +1,325 @@
+`default_nettype none
+
+module top_level(
+    input wire clk_100mhz,          // 100 MHz clock from Urbana board
+    input wire [15:0] sw,           // Switches
+    input wire [3:0] btn,           // Buttons
+    output logic [15:0] led,        // LEDs
+    output logic [2:0] rgb0,        // RGB LED 0
+    output logic [2:0] rgb1,        // RGB LED 1
+    // output logic [3:0] ss0_an,      // Seven segment anodes
+    // output logic [3:0] ss1_an,
+    // output logic [6:0] ss0_c,       // Seven segment cathodes
+    // output logic [6:0] ss1_c,
+    
+    // PMOD JA pins for SSI (differential pairs)
+    // Use PMOD connector with differential capability
+
+    output wire dclk_plus,              // SSI Clock positive
+    output wire dclk_minus,              // SSI Clock negative
+    input wire data_plus,               // SSI Data positive
+    input wire data_minus,                // SSI Data negative
+
+    input wire              uart_rxd, // UART computer->FPGA
+    output logic            uart_txd, // UART FPGA->computer
+
+    //debug ports:
+    // output logic debug_pmod_ja_p1,        //change name of pmodb[0] in default xdc
+    // output logic debug_pmod_ja_n1,        //change name of pmodb[1] in default xdc
+    // output logic debug_pmod_ja_p2,        //change name of pmodb[2] in default xdc
+    // output logic debug_pmod_ja_n2,          //change name of pmodb[3] in default xdc
+
+    input wire   copi,          // (Controller-Out-Peripheral-In)
+    output logic cipo,          // (Controller-In-Peripheral-Out)
+    input wire   dclk,          // (Data Clock) - from controller
+    input wire   cs,             // (Chip Select) - from controller
+
+    output logic spi_packet_ready //MAKE XDC FOR THIS
+);
+
+    // ===== Reset and Trigger Logic =====
+    logic rst;
+    logic trigger;
+    logic [23:0] auto_trigger_counter;
+    logic auto_trigger;
+    
+    assign rst = btn[0];
+    
+    // Auto-trigger for continuous reading (adjustable rate)
+    always_ff @(posedge clk_100mhz) begin
+        if (rst) begin
+            auto_trigger_counter <= '0;
+            auto_trigger <= 1'b0;
+        end else begin
+            // Trigger every 100ms (well above tB = 70µs requirement)
+            if (auto_trigger_counter >= 24'd10_000_000) begin
+                auto_trigger_counter <= '0;
+                auto_trigger <= 1'b1;
+            end else begin
+                auto_trigger_counter <= auto_trigger_counter + 1;
+                auto_trigger <= 1'b0;
+            end
+        end
+    end
+    
+    // Manual trigger with debouncing
+    logic [19:0] btn_debounce;
+    logic btn_trigger;
+    
+    always_ff @(posedge clk_100mhz) begin
+        if (rst) begin
+            btn_debounce <= '0;
+            btn_trigger <= 1'b0;
+        end else begin
+            if (btn[1]) begin
+                if (btn_debounce < 20'd100_000) begin
+                    btn_debounce <= btn_debounce + 1;
+                    btn_trigger <= 1'b0;
+                end else begin
+                    btn_trigger <= 1'b1;
+                end
+            end else begin
+                btn_debounce <= '0;
+                btn_trigger <= 1'b0;
+            end
+        end
+    end
+    
+    // Select trigger source: SW[15] = 1 for auto, 0 for manual
+    assign trigger = sw[15] ? auto_trigger : btn_trigger;
+    
+    // ===== SSI Master Instance =====
+    logic [18:0] encoder_position;
+    logic [9:0] encoder_status;
+    logic data_valid;
+    logic busy;
+    logic error_flag, warning_flag;
+    
+    // Adjust clock frequency based on cable length
+    // 500 kHz (short cable <5m)
+    logic [9:0] ssi_clk_freq;
+    assign ssi_clk_freq = 10'd500;
+    
+    ssi_master #(
+        .CLK_FREQ_MHZ(100),
+        .POSITION_BITS(19),
+        .STATUS_BITS(10),
+        .TOTAL_BITS(30)
+    ) ssi_inst (
+        .clk(clk_100mhz),
+        .rst(rst),
+        .trigger(trigger),
+        .ssi_clk_freq_khz(ssi_clk_freq),
+        
+        // Differential I/O 
+        .ssi_clk_p(dclk_plus),
+        .ssi_clk_n(dclk_minus),
+        .ssi_data_p(data_plus),
+        .ssi_data_n(data_minus),
+        
+        // Parallel outputs
+        .position(encoder_position),
+        .status(encoder_status),
+        .data_valid(data_valid),
+        .busy(busy),
+        .error_flag(error_flag),
+        .warning_flag(warning_flag)
+    );
+    
+    // ===== LED Display =====
+    assign led[15] = sw[15];            // Auto-trigger mode indicator
+    assign led[14] = busy;              // Busy indicator
+    assign led[13] = error_flag;        // Error flag
+    assign led[12] = warning_flag;      // Warning flag
+    assign led[11] = data_valid;        // Data valid pulse
+    assign led[10:0] = encoder_position[18:8];  // Upper 11 bits of position
+    
+    // ===== RGB LED Status =====
+    // RGB0: Error/Warning/OK status
+    assign rgb0[0] = error_flag;                        // Red = Error
+    assign rgb0[1] = warning_flag && !error_flag;       // Green = Warning
+    assign rgb0[2] = !error_flag && !warning_flag;      // Blue = OK
+    
+    // RGB1: Busy/Activity indicator (blink on data valid)
+    logic [23:0] blink_counter;
+    logic blink;
+    
+    always_ff @(posedge clk_100mhz) begin
+        if (rst) begin
+            blink_counter <= '0;
+            blink <= 1'b0;
+        end else begin
+            if (data_valid) begin
+                blink_counter <= 24'd5_000_000;  // 50ms blink
+            end else if (blink_counter > 0) begin
+                blink_counter <= blink_counter - 1;
+            end
+            
+            blink <= (blink_counter > 0);
+        end
+    end
+    
+    assign rgb1[0] = 1'b0;
+    assign rgb1[1] = blink;  // Green blink on new data
+    assign rgb1[2] = 1'b0;
+
+
+    // ===== UART Packet Handling =====
+    // Data latching signals
+    logic [18:0] encoder_position_latched;
+    logic [9:0]  encoder_status_latched;
+    logic        error_flag_latched;
+    logic        warning_flag_latched;
+    logic        data_valid_d;
+    logic        send_pending;
+    
+    // Packet format signals
+    logic [55:0] uart_packet;
+    logic [55:0] uart_shift_reg;
+    logic [2:0]  uart_byte_count;  // 3 bits to count 0-7
+    logic        packet_waiting;
+    
+    logic [7:0]  uart_data_in;
+    logic        uart_data_valid;
+    logic        uart_busy;
+
+    // Format: 0x66 [POS_H] [POS_L] [STATUS_H] [STATUS_L] [FLAGS] 0x0D 0x0A
+    always_comb begin
+        uart_packet = {
+            8'h0A, 8'h0D,  // \n \r
+            {error_flag_latched, warning_flag_latched, 6'b0},
+            encoder_status_latched[7:0],
+            encoder_position_latched[15:8],
+            encoder_position_latched[7:0],
+            8'h66  // Header
+        };
+    end
+
+    
+    // ===== SPI Multi-Byte Handler =====
+    logic [55:0] spi_packet;
+    logic [55:0] spi_shift_reg;
+    logic [2:0]  spi_byte_count;
+    logic        spi_packet_ready;
+    logic        spi_byte_valid;
+    logic [7:0]  spi_data_to_send;
+    
+    // Use same packet format as UART
+    assign spi_packet = uart_packet;  // Reuse existing packet!
+    
+    // Multi-byte transmission state machine
+    always_ff @(posedge clk_100mhz) begin
+        if (rst) begin
+            spi_shift_reg    <= 56'd0;
+            spi_byte_count   <= 3'd0;
+            spi_packet_ready <= 1'b0;
+        end else begin
+            // Load new packet when encoder data arrives
+            if (data_valid && !data_valid_d) begin
+                spi_shift_reg    <= spi_packet;
+                spi_byte_count   <= 3'd0;
+                spi_packet_ready <= 1'b1;
+            end
+            
+            // When SPI completes a byte transfer
+            if (spi_byte_valid && spi_packet_ready) begin
+                if (spi_byte_count == 3'd6) begin
+                    // All 7 bytes sent (bytes 0-6)
+                    spi_packet_ready <= 1'b0;
+                    spi_byte_count   <= 3'd0;
+                end else begin
+                    // Shift to next byte
+                    spi_shift_reg  <= {8'd0, spi_shift_reg[55:8]};
+                    spi_byte_count <= spi_byte_count + 1'b1;
+                end
+            end
+        end
+    end
+    
+    // Current byte to send (or 0x00 if no packet ready)
+    assign spi_data_to_send = 8'hAA;
+    
+    // SPI Peripheral instance
+    spi_peripheral #(.DATA_WIDTH(8)) spi_slave (
+        .clk(clk_100mhz),
+        .rst(rst),
+        .data_in(spi_data_to_send),    // Connected properly now
+        .data_out(),                    // Ignore received data for now
+        .data_valid(spi_byte_valid),    // Pulses after each byte
+        
+        .copi(copi),
+        .cipo(cipo),
+        .dclk(dclk),
+        .cs(cs)
+    );
+
+    // ===== MERGED STATE MACHINE (FIX #1: Single always_ff block) =====
+    always_ff @(posedge clk_100mhz) begin
+        if (rst) begin
+            // Data latching signals
+            encoder_position_latched <= '0;
+            encoder_status_latched   <= '0;
+            error_flag_latched       <= 1'b0;
+            warning_flag_latched     <= 1'b0;
+            data_valid_d             <= 1'b0;
+            send_pending             <= 1'b0;
+            
+            // UART transmission signals
+            uart_shift_reg           <= 56'd0;
+            uart_byte_count          <= 3'd0;
+            packet_waiting           <= 1'b0; 
+        end else begin
+            // Edge detect on data_valid
+            data_valid_d <= data_valid;
+            
+            // Latch incoming SSI data
+            if (data_valid && !data_valid_d) begin
+                encoder_position_latched <= encoder_position;
+                encoder_status_latched   <= encoder_status;
+                error_flag_latched       <= error_flag;
+                warning_flag_latched     <= warning_flag;
+                send_pending             <= 1'b1;
+            end
+            
+            // Load packet when ready
+            if (send_pending && !packet_waiting) begin
+                uart_shift_reg  <= uart_packet;
+                uart_byte_count <= 3'd0;
+                packet_waiting  <= 1'b1;
+                send_pending    <= 1'b0;  // Clear flag after loading
+            end 
+            // Transmit bytes one at a time
+            else if (uart_data_valid) begin
+                if (uart_byte_count == 3'd7) begin  // 0-7 = 8 bytes
+                    packet_waiting <= 1'b0;
+                end else begin
+                    uart_shift_reg  <= {8'd0, uart_shift_reg[55:8]};
+                    uart_byte_count <= uart_byte_count + 1'b1;
+                end
+            end
+        end
+    end
+
+    uart_transmit
+    #(
+        .INPUT_CLOCK_FREQ(100_000_000),
+        .BAUD_RATE(115200)
+    ) my_uart_transmit (
+        .clk(clk_100mhz),
+        .rst(rst),
+        .din(uart_data_in),
+        .trigger(uart_data_valid),
+        .busy(uart_busy),
+        .dout(uart_txd)
+    );
+
+    assign uart_data_valid = packet_waiting && !uart_busy;
+    assign uart_data_in    = uart_shift_reg[7:0];
+    
+
+endmodule
+
+
+
+
+`default_nettype wire
