@@ -138,7 +138,7 @@ set_property -dict {PACKAGE_PIN H18 IOSTANDARD LVCMOS33}  [ get_ports "dclk" ]
 # set_property -dict {PACKAGE_PIN H16 IOSTANDARD LVCMOS33}  [ get_ports "debug_uart_rxd" ]
 # set_property -dict {PACKAGE_PIN H17 IOSTANDARD LVCMOS33}  [ get_ports "debug_uart_txd" ]
 #set_property -dict {PACKAGE_PIN K16 IOSTANDARD LVCMOS33}  [ get_ports "pmodb[6]" ]
-set_property -dict {PACKAGE_PIN J16 IOSTANDARD LVCMOS33}  [ get_ports "spi_packet_ready" ]
+set_property -dict {PACKAGE_PIN J16 IOSTANDARD LVCMOS33}  [ get_ports "spi_trigger" ]
 
 # PMOD AB Signals
 #set_property -dict {PACKAGE_PIN D11 IOSTANDARD LVCMOS33} [get_ports {jab[0]}]

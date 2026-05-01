@@ -9,9 +9,9 @@ module spi_peripheral
         input wire   [DATA_WIDTH-1:0] data_in,  // data to send to controller
         output logic [DATA_WIDTH-1:0] data_out, // data received from controller
         output logic data_valid,    // high when output data is present
- 
+        output logic busy,
         input wire   copi,          // (Controller-Out-Peripheral-In)
-        output logic cipo,          // (Controller-In-Peripheral-Out)
+        output wire cipo,          // (Controller-In-Peripheral-Out)
         input wire   dclk,          // (Data Clock) - from controller
         input wire   cs             // (Chip Select) - from controller
     );
@@ -45,60 +45,68 @@ module spi_peripheral
     assign dclk_rising = (dclk_sync[2:1] == 2'b01);
     assign dclk_falling = (dclk_sync[2:1] == 2'b10);
     assign cs_falling = (cs_sync[2:1] == 2'b10);
+
+    logic cipo_internal;
+    logic cipo_enable;
+    assign cipo = cipo_enable ? cipo_internal : 1'bz;  // ← High-impedance when disabled
     
+    // SPI peripheral state machine
     // SPI peripheral state machine
     always_ff @(posedge clk) begin
         if (rst) begin
-            cipo <= 1'b0;
+            cipo_enable <= 1'b0;
             data_out <= '0;
             data_valid <= 1'b0;
-            current_data_in <= '0;
             current_data_out <= '0;
             idx <= '0;
+            busy <= 0;
         end 
-        else if (cs_sync[2]) begin
-            // CS is high - idle state
-            data_valid <= 1'b0;
-            cipo <= 1'b0;
-            idx <= '0;
-        end
         else if (cs_falling) begin
             // CS just went low - start of transaction
-            // Load data to transmit and setup FIRST BIT immediately
-            current_data_in <= data_in;
             current_data_out <= '0;
             idx <= DATA_WIDTH - 1;
             data_valid <= 1'b0;
+            busy <= 1'b1;
+            cipo_enable <= 1'b1;
             
-            //Set first bit immediately for CPHA=1
-            cipo <= data_in[DATA_WIDTH-1];  // First bit ready NOW
+            // FIX: For Mode 1 (CPHA=1), do NOT output the first bit on CS falling. 
+            // It must be placed on the line on the first clock edge (leading edge).
         end
+
         else if (!cs_sync[2]) begin
             // CS is low - transaction in progress
             
-            // CPHA=1: Data changes on leading edge (rising for CPOL=0)
+            // FIX: Clear data_valid by default so it acts as a single 1-cycle pulse
+            data_valid <= 1'b0; 
+            
+            // Mode 1 (CPOL=0, CPHA=1): Leading edge is RISING
             if (dclk_rising) begin
-                // Sample COPI input on rising edge
+                // FIX: SHIFT out data on leading edge
+                cipo_internal <= data_in[idx];
+            end
+            
+            // Mode 1 (CPOL=0, CPHA=1): Trailing edge is FALLING
+            else if (dclk_falling) begin
+                // FIX: SAMPLE data on trailing edge
                 current_data_out <= (current_data_out << 1) | copi;
                 
-                // Decrement index after sampling
                 if (idx != 0) begin
                     idx <= idx - 1;
                 end else begin
-                    // Last bit sampled - transaction complete
-                    data_valid <= 1'b1;
+                    // Last bit sampled - transaction complete for THIS byte
+                    data_out <= {current_data_out[DATA_WIDTH-2:0], copi};
+                    data_valid <= 1'b1;        // Trigger 1-cycle pulse
+                    idx <= DATA_WIDTH - 1;     // FIX: Wrap index to support multi-byte bursts!
                 end
             end
-            
-            // CPHA=1: Output next bit on trailing edge (falling for CPOL=0)
-            else if (dclk_falling) begin
-                //FIX: Output bit selected by idx
-                if (idx != 0) begin
-                    cipo <= current_data_in[idx - 1];  // Next bit
-                end else begin
-                    cipo <= 1'b0;  // Transaction done
-                end
-            end
+        end
+        else if (cs_sync[2]) begin
+            // CS is high - idle state
+            data_valid <= 1'b0;
+            busy <= 0;
+            //cipo <= 1'b0;
+            cipo_enable <= 1'b0;
+            idx <= '0;
         end
     end
     
@@ -107,57 +115,3 @@ endmodule
 `default_nettype wire
 
 
-
-// //gemini's fix: 
-// // SPI peripheral state machine
-//     always_ff @(posedge clk) begin
-//         if (rst) begin
-//             cipo <= 1'b0;
-//             data_out <= '0;
-//             data_valid <= 1'b0;
-//             current_data_out <= '0;
-//             idx <= '0;
-//         end 
-//         else if (cs_sync[2]) begin
-//             // CS is high - idle state
-//             data_valid <= 1'b0;
-//             cipo <= 1'b0;
-//             idx <= '0;
-//         end
-//         else if (cs_falling) begin
-//             // CS just went low - start of transaction
-//             current_data_out <= '0;
-//             idx <= DATA_WIDTH - 1;
-//             data_valid <= 1'b0;
-            
-//             // FIX: For Mode 1 (CPHA=1), do NOT output the first bit on CS falling. 
-//             // It must be placed on the line on the first clock edge (leading edge).
-//         end
-//         else if (!cs_sync[2]) begin
-//             // CS is low - transaction in progress
-            
-//             // FIX: Clear data_valid by default so it acts as a single 1-cycle pulse
-//             data_valid <= 1'b0; 
-            
-//             // Mode 1 (CPOL=0, CPHA=1): Leading edge is RISING
-//             if (dclk_rising) begin
-//                 // FIX: SHIFT out data on leading edge
-//                 cipo <= data_in[idx];
-//             end
-            
-//             // Mode 1 (CPOL=0, CPHA=1): Trailing edge is FALLING
-//             else if (dclk_falling) begin
-//                 // FIX: SAMPLE data on trailing edge
-//                 current_data_out <= (current_data_out << 1) | copi;
-                
-//                 if (idx != 0) begin
-//                     idx <= idx - 1;
-//                 end else begin
-//                     // Last bit sampled - transaction complete for THIS byte
-//                     data_out <= {current_data_out[DATA_WIDTH-2:0], copi};
-//                     data_valid <= 1'b1;        // Trigger 1-cycle pulse
-//                     idx <= DATA_WIDTH - 1;     // FIX: Wrap index to support multi-byte bursts!
-//                 end
-//             end
-//         end
-//     end

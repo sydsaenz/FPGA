@@ -30,11 +30,11 @@ module top_level(
     // output logic debug_pmod_ja_n2,          //change name of pmodb[3] in default xdc
 
     input wire   copi,          // (Controller-Out-Peripheral-In)
-    output logic cipo,          // (Controller-In-Peripheral-Out)
+    output wire cipo,          // (Controller-In-Peripheral-Out)
     input wire   dclk,          // (Data Clock) - from controller
     input wire   cs,             // (Chip Select) - from controller
 
-    output logic spi_packet_ready //MAKE XDC FOR THIS
+    input wire spi_trigger //MAKE XDC FOR THIS
 );
 
     // ===== Reset and Trigger Logic =====
@@ -86,7 +86,7 @@ module top_level(
     end
     
     // Select trigger source: SW[15] = 1 for auto, 0 for manual
-    assign trigger = sw[15] ? auto_trigger : btn_trigger;
+    assign trigger = sw[15] ? auto_trigger : spi_trigger;
     
     // ===== SSI Master Instance =====
     logic [18:0] encoder_position;
@@ -174,7 +174,7 @@ module top_level(
     logic        send_pending;
     
     // Packet format signals
-    logic [55:0] uart_packet;
+    logic [39:0] uart_packet;
     logic [55:0] uart_shift_reg;
     logic [2:0]  uart_byte_count;  // 3 bits to count 0-7
     logic        packet_waiting;
@@ -183,61 +183,69 @@ module top_level(
     logic        uart_data_valid;
     logic        uart_busy;
 
-    // Format: 0x66 [POS_H] [POS_L] [STATUS_H] [STATUS_L] [FLAGS] 0x0D 0x0A
     always_comb begin
         uart_packet = {
-            8'h0A, 8'h0D,  // \n \r
-            {error_flag_latched, warning_flag_latched, 6'b0},
+            {error_flag_latched, warning_flag_latched, 6'b000001},
             encoder_status_latched[7:0],
-            encoder_position_latched[15:8],
             encoder_position_latched[7:0],
-            8'h66  // Header
+            encoder_position_latched[15:8],
+            5'b10000,
+            encoder_position_latched[18:16]
         };
     end
 
     
     // ===== SPI Multi-Byte Handler =====
-    logic [55:0] spi_packet;
+    logic [39:0] spi_packet;
     logic [55:0] spi_shift_reg;
     logic [2:0]  spi_byte_count;
-    logic        spi_packet_ready;
     logic        spi_byte_valid;
     logic [7:0]  spi_data_to_send;
-    
-    // Use same packet format as UART
-    assign spi_packet = uart_packet;  // Reuse existing packet!
-    
-    // Multi-byte transmission state machine
+    logic        spi_busy;
+    logic spi_packet_ready;
+    logic        spi_transaction_done;
+    logic        encoder_data_available;  // NEW: Track if we have valid data
+
+    assign spi_packet = uart_packet;
+    assign spi_transaction_done = (spi_byte_count == 3'd4) && spi_byte_valid;
+
     always_ff @(posedge clk_100mhz) begin
         if (rst) begin
-            spi_shift_reg    <= 56'd0;
-            spi_byte_count   <= 3'd0;
-            spi_packet_ready <= 1'b0;
-        end else begin
-            // Load new packet when encoder data arrives
-            if (data_valid && !data_valid_d) begin
-                spi_shift_reg    <= spi_packet;
-                spi_byte_count   <= 3'd0;
-                spi_packet_ready <= 1'b1;
-            end
+            spi_shift_reg          <= 56'd0;
+            spi_byte_count         <= 3'd0;
+            spi_packet_ready       <= 1'b0;
+            encoder_data_available <= 1'b0;  // NEW
+        end 
+        else if (spi_packet_ready) spi_packet_ready <= 1'b0;  // Drop interrupt
+
+        
+        // ===== Priority 1: Complete transaction =====
+        else if (spi_transaction_done) begin
+            spi_byte_count         <= 3'd0;
+            encoder_data_available <= 1'b0;  // Mark data as consumed
+        end
+        
+        // ===== Priority 2: Shift to next byte =====
+        else if (spi_byte_valid) begin
+            spi_shift_reg  <= {8'd0, spi_shift_reg[55:8]};
+            spi_byte_count <= spi_byte_count + 1'b1;
+        end
+        
+        // ===== Priority 3: Load new encoder data =====
+        else if (data_valid && !data_valid_d) begin
+            // Always load fresh encoder data when it arrives
+            spi_shift_reg          <= spi_packet;
+            spi_byte_count         <= 3'd0;
+            encoder_data_available <= 1'b1;  // Mark as available
             
-            // When SPI completes a byte transfer
-            if (spi_byte_valid && spi_packet_ready) begin
-                if (spi_byte_count == 3'd6) begin
-                    // All 7 bytes sent (bytes 0-6)
-                    spi_packet_ready <= 1'b0;
-                    spi_byte_count   <= 3'd0;
-                end else begin
-                    // Shift to next byte
-                    spi_shift_reg  <= {8'd0, spi_shift_reg[55:8]};
-                    spi_byte_count <= spi_byte_count + 1'b1;
-                end
+            // Raise interrupt ONLY if SPI is idle
+            if (!spi_busy && !spi_packet_ready) begin
+                spi_packet_ready <= 1'b1;
             end
         end
     end
-    
-    // Current byte to send (or 0x00 if no packet ready)
-    assign spi_data_to_send = 8'hAA;
+
+    assign spi_data_to_send = spi_shift_reg[7:0];
     
     // SPI Peripheral instance
     spi_peripheral #(.DATA_WIDTH(8)) spi_slave (
@@ -246,7 +254,7 @@ module top_level(
         .data_in(spi_data_to_send),    // Connected properly now
         .data_out(),                    // Ignore received data for now
         .data_valid(spi_byte_valid),    // Pulses after each byte
-        
+        .busy(spi_busy),
         .copi(copi),
         .cipo(cipo),
         .dclk(dclk),
