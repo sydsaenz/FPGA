@@ -1,5 +1,4 @@
 `default_nettype none
-// ===== SSI Master with Differential I/O =====
 module ssi_master #(
     parameter CLK_FREQ_MHZ = 100,
     parameter POSITION_BITS = 19,
@@ -32,16 +31,17 @@ module ssi_master #(
     assign ssi_clk_p = ssi_clk_internal; 
     assign ssi_clk_n = !ssi_clk_p;
 
-    // logic ssi_data_sync1, ssi_data_sync2;
+    
+    // logic ssi_data_sync1, ssi_data_sync2; //for buffer
 
     // always_ff @(posedge clk) begin
-    //     ssi_data_sync1 <= ssi_data_p;      // First stage
-    //     ssi_data_sync2 <= ssi_data_sync1;  // Second stage (metastable filter)
+    //     ssi_data_sync1 <= ssi_data_p;     
+    //     ssi_data_sync2 <= ssi_data_sync1;  
     // end
 
     assign ssi_data_internal = ssi_data_p;
 
-    
+    //we dont need this anymore now that we have a transceiver chip
     // // ===== Differential I/O Buffers =====
     // // OBUFDS: Convert single-ended clock to differential
     // OBUFDS #(     
@@ -134,10 +134,10 @@ module ssi_master #(
                 end
                 
                 WAIT_INITIAL: begin
-                    // Wait 2us before first clock
+                    // Wait 3us before first clock
                     ssi_clk_internal <= 1'b0;
                     timer <= timer + 1;
-                    if (timer >= (3 * CLK_FREQ_MHZ) - 1) begin  
+                    if (timer >= (3 * CLK_FREQ_MHZ) - 1) begin    //FIX all of these. Delay should not change if CLK_FREQ changes
                         timer <= 0;
                         state <= CLOCK_LOW;
                     end
@@ -153,18 +153,6 @@ module ssi_master #(
                     end
                 end
                 
-                // CLOCK_HIGH: begin
-                //     if (clk_counter == 0) begin
-                //         ssi_clk_internal <= 1'b1;
-                //     end
-                //     clk_counter <= clk_counter + 1;
-                    
-                //     if (clk_counter >= ssi_clk_half_period - 1) begin
-                //         clk_counter <= '0;
-                //         state <= CAPTURE_DATA;
-                //     end
-                // end
-
                 CLOCK_HIGH: begin
                     ssi_clk_internal <= 1'b1;
                     clk_counter <= clk_counter + 1;
@@ -210,30 +198,12 @@ module ssi_master #(
                         timer <= 0;
                     end
                 end
-                
-                // WAIT_MONOFLOP: begin
-                //     ssi_clk_internal <= 1'b1;
-                //     timer <= timer + 1;
-                    
-                //     // Wait 22µs for monoflop timeout
-                //     if (timer >= (22 * CLK_FREQ_MHZ) - 1) begin
-                //         timer <= '0;
-                //         state <= WAIT_PAUSE;
-                        
-                //         // Parse received data
-                //         // Format: [start bit][19 position][10 status]
-                //         position <= shift_reg[TOTAL_BITS-2 : 10];
-                //         status <= shift_reg[STATUS_BITS-1:0];
-                //         error_flag <= shift_reg[9];
-                //         warning_flag <= shift_reg[8];
-                //     end
-                // end
 
                 WAIT_MONOFLOP: begin
                     ssi_clk_internal <= 1'b1;  // Clock goes high during tM
                     timer <= timer + 1;
                     
-                    // Wait 22µs for monoflop timeout (tM = 20µs + margin)
+                    // Wait for monoflop timeout 
                     if (timer >= (22 * CLK_FREQ_MHZ) - 1) begin
                         timer <= 0;
                         
@@ -250,7 +220,7 @@ module ssi_master #(
                     ssi_clk_internal <= 1'b1;
                     timer <= timer + 1;
                     
-                    // Wait 25µs pause (tM + 2µs + margin)
+                    // Wait 25us
                     if (timer >= (25 * CLK_FREQ_MHZ) - 1) begin
                         state <= DONE;
                     end

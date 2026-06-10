@@ -23,21 +23,15 @@ module top_level(
     input wire              uart_rxd, // UART computer->FPGA
     output logic            uart_txd, // UART FPGA->computer
 
-    //debug ports:
-    // output logic debug_pmod_ja_p1,        //change name of pmodb[0] in default xdc
-    // output logic debug_pmod_ja_n1,        //change name of pmodb[1] in default xdc
-    // output logic debug_pmod_ja_p2,        //change name of pmodb[2] in default xdc
-    // output logic debug_pmod_ja_n2,          //change name of pmodb[3] in default xdc
 
     input wire   copi,          // (Controller-Out-Peripheral-In)
     output wire cipo,          // (Controller-In-Peripheral-Out)
     input wire   dclk,          // (Data Clock) - from controller
     input wire   cs,             // (Chip Select) - from controller
 
-    input wire spi_trigger //MAKE XDC FOR THIS
+    input wire spi_trigger 
 );
 
-    // ===== Reset and Trigger Logic =====
     logic rst;
     logic trigger;
     logic [23:0] auto_trigger_counter;
@@ -51,7 +45,7 @@ module top_level(
             auto_trigger_counter <= '0;
             auto_trigger <= 1'b0;
         end else begin
-            // Trigger every 100ms (well above tB = 70µs requirement)
+            // Trigger every 100ms (well above 70us requirement)
             if (auto_trigger_counter >= 24'd10_000_000) begin
                 auto_trigger_counter <= '0;
                 auto_trigger <= 1'b1;
@@ -88,15 +82,12 @@ module top_level(
     // Select trigger source: SW[15] = 1 for auto, 0 for manual
     assign trigger = sw[15] ? auto_trigger : !spi_trigger;
     
-    // ===== SSI Master Instance =====
     logic [18:0] encoder_position;
     logic [9:0] encoder_status;
     logic data_valid;
     logic busy;
     logic error_flag, warning_flag;
     
-    // Adjust clock frequency based on cable length
-    // 500 kHz (short cable <5m)
     logic [9:0] ssi_clk_freq;
     assign ssi_clk_freq = 12'd1000;
     
@@ -126,7 +117,6 @@ module top_level(
         .warning_flag(warning_flag)
     );
     
-    // ===== LED Display =====
     assign led[15] = sw[15];            // Auto-trigger mode indicator
     assign led[14] = busy;              // Busy indicator
     assign led[13] = error_flag;        // Error flag
@@ -134,7 +124,7 @@ module top_level(
     assign led[11] = data_valid;        // Data valid pulse
     assign led[10:0] = encoder_position[18:8];  // Upper 11 bits of position
     
-    // ===== RGB LED Status =====
+
     // RGB0: Error/Warning/OK status
     assign rgb0[0] = error_flag;                        // Red = Error
     assign rgb0[1] = warning_flag && !error_flag;       // Green = Warning
@@ -163,8 +153,6 @@ module top_level(
     assign rgb1[1] = blink;  // Green blink on new data
     assign rgb1[2] = 1'b0;
 
-
-    // ===== UART Packet Handling =====
     // Data latching signals
     logic [18:0] encoder_position_latched;
     logic [9:0]  encoder_status_latched;
@@ -195,7 +183,6 @@ module top_level(
     end
 
     
-    // ===== SPI Multi-Byte Handler =====
     logic [39:0] spi_packet;
     logic [55:0] spi_shift_reg;
     logic [2:0]  spi_byte_count;
@@ -219,19 +206,19 @@ module top_level(
         else if (spi_packet_ready) spi_packet_ready <= 1'b0;  // Drop interrupt
 
         
-        // ===== Priority 1: Complete transaction =====
+        //complete transaction
         else if (spi_transaction_done) begin
             spi_byte_count         <= 3'd0;
             encoder_data_available <= 1'b0;  // Mark data as consumed
         end
         
-        // ===== Priority 2: Shift to next byte =====
+        // Shift to next byte 
         else if (spi_byte_valid) begin
             spi_shift_reg  <= {8'd0, spi_shift_reg[55:8]};
             spi_byte_count <= spi_byte_count + 1'b1;
         end
         
-        // ===== Priority 3: Load new encoder data =====
+        //Load new encoder data
         else if (data_valid && !data_valid_d) begin
             // Always load fresh encoder data when it arrives
             spi_shift_reg          <= spi_packet;
@@ -247,7 +234,6 @@ module top_level(
 
     assign spi_data_to_send = spi_shift_reg[7:0];
     
-    // SPI Peripheral instance
     spi_peripheral #(.DATA_WIDTH(8)) spi_slave (
         .clk(clk_100mhz),
         .rst(rst),
@@ -261,7 +247,7 @@ module top_level(
         .cs(cs)
     );
 
-    // ===== MERGED STATE MACHINE (FIX #1: Single always_ff block) =====
+  
     always_ff @(posedge clk_100mhz) begin
         if (rst) begin
             // Data latching signals

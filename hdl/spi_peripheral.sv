@@ -48,9 +48,8 @@ module spi_peripheral
 
     logic cipo_internal;
     logic cipo_enable;
-    assign cipo = cipo_enable ? cipo_internal : 1'bz;  // ← High-impedance when disabled
+    assign cipo = cipo_enable ? cipo_internal : 1'bz;  // High-impedance when disabled
     
-    // SPI peripheral state machine
     // SPI peripheral state machine
     always_ff @(posedge clk) begin
         if (rst) begin
@@ -69,25 +68,25 @@ module spi_peripheral
             busy <= 1'b1;
             cipo_enable <= 1'b1;
             
-            // FIX: For Mode 1 (CPHA=1), do NOT output the first bit on CS falling. 
+            // For Mode 1 (CPHA=1), do NOT output the first bit on CS falling. 
             // It must be placed on the line on the first clock edge (leading edge).
         end
 
         else if (!cs_sync[2]) begin
             // CS is low - transaction in progress
             
-            // FIX: Clear data_valid by default so it acts as a single 1-cycle pulse
+            // Clear data_valid by default so it acts as a single 1-cycle pulse
             data_valid <= 1'b0; 
             
             // Mode 1 (CPOL=0, CPHA=1): Leading edge is RISING
             if (dclk_rising) begin
-                // FIX: SHIFT out data on leading edge
+                //SHIFT out data on leading edge
                 cipo_internal <= data_in[idx];
             end
             
             // Mode 1 (CPOL=0, CPHA=1): Trailing edge is FALLING
             else if (dclk_falling) begin
-                // FIX: SAMPLE data on trailing edge
+                // SAMPLE data on trailing edge
                 current_data_out <= (current_data_out << 1) | copi;
                 
                 if (idx != 0) begin

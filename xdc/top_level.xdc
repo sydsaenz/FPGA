@@ -99,32 +99,10 @@ set_property -dict {PACKAGE_PIN A8  IOSTANDARD LVCMOS33} [ get_ports "sw[15]" ]
 #set_property -dict {PACKAGE_PIN E14 IOSTANDARD LVCMOS33}  [ get_ports "pmoda[6]" ]
 #set_property -dict {PACKAGE_PIN E15 IOSTANDARD LVCMOS33}  [ get_ports "pmoda[7]" ]
 
-## ===== PMOD JA for SSI Encoder (Differential Pairs) =================================================================
-## Use top row of PMOD JA for differential signals
-## IMPORTANT: These pins support LVDS differential I/O
 
-# # SSI Clock Output (Differential Pair)
-# set_property -dict {PACKAGE_PIN F14 IOSTANDARD LVDS_25} [get_ports "pmod_ja_p1"]
-# set_property -dict {PACKAGE_PIN F15 IOSTANDARD LVDS_25} [get_ports "pmod_ja_n1"]
-
-# # SSI Data Input (Differential Pair)
-# set_property -dict {PACKAGE_PIN H13 IOSTANDARD LVDS_25 DIFF_TERM TRUE} [get_ports "pmod_ja_p2"]
-# set_property -dict {PACKAGE_PIN H14 IOSTANDARD LVDS_25 DIFF_TERM TRUE} [get_ports "pmod_ja_n2"]
-
-
-# # SSI Clock Output (Differential Pair)
-# set_property -dict {PACKAGE_PIN F14 IOSTANDARD TMDS_33 DRIVE 16} [get_ports "dclk_plus"]
-# set_property -dict {PACKAGE_PIN F15 IOSTANDARD TMDS_33 DRIVE 16} [get_ports "dclk_minus"]
-
-# # SSI Data Input (Differential Pair)
-# set_property -dict {PACKAGE_PIN H13 IOSTANDARD TMDS_33 DRIVE 16} [get_ports "data_plus"]
-# set_property -dict {PACKAGE_PIN H14 IOSTANDARD TMDS_33 DRIVE 16} [get_ports "data_minus"]
-
-# SSI Clock Output (Differential Pair)
 set_property -dict {PACKAGE_PIN F14 IOSTANDARD LVCMOS33} [get_ports "dclk_plus"]
 set_property -dict {PACKAGE_PIN F15 IOSTANDARD LVCMOS33} [get_ports "dclk_minus"]
 
-# SSI Data Input (Differential Pair)
 set_property -dict {PACKAGE_PIN H13 IOSTANDARD LVCMOS33} [get_ports "data_plus"]
 set_property -dict {PACKAGE_PIN H14 IOSTANDARD LVCMOS33} [get_ports "data_minus"]
 

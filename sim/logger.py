@@ -22,7 +22,7 @@ with open(FILENAME, 'w', newline='') as csvfile:
             if ser.in_waiting:
                 line = ser.readline().decode('ascii', errors='ignore').strip()
                 if line.startswith('POS:'):
-                    # Parse your existing format
+                    # Parse existing format
                     # POS:XXXXX STS:XXXX ERR:X WRN:X
                     parts = line.split()
                     pos = parts[0].split(':')[1]
