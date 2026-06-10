@@ -9,7 +9,7 @@ module ssi_master #(
     input wire clk,
     input wire rst,
     input wire trigger,
-    input wire [9:0] ssi_clk_freq_khz,      // Configurable SSI clock frequency
+    input wire [11:0] ssi_clk_freq_khz,      // Configurable SSI clock frequency
     
     // Differential SSI interface
     output wire ssi_clk_p,
@@ -69,8 +69,8 @@ module ssi_master #(
     logic [TOTAL_BITS-1:0] shift_reg;
     logic got_bit;
     
-    logic [15:0] ssi_clk_half_period;
-    assign ssi_clk_half_period = 16'd500;
+    logic [7:0] ssi_clk_half_period;
+    assign ssi_clk_half_period = 8'd50;
     
     typedef enum logic [3:0] {
         IDLE,
@@ -137,7 +137,7 @@ module ssi_master #(
                     // Wait 2us before first clock
                     ssi_clk_internal <= 1'b0;
                     timer <= timer + 1;
-                    if (timer >= (10 * CLK_FREQ_MHZ) - 1) begin  
+                    if (timer >= (3 * CLK_FREQ_MHZ) - 1) begin  
                         timer <= 0;
                         state <= CLOCK_LOW;
                     end

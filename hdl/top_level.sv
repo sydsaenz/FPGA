@@ -86,7 +86,7 @@ module top_level(
     end
     
     // Select trigger source: SW[15] = 1 for auto, 0 for manual
-    assign trigger = sw[15] ? auto_trigger : spi_trigger;
+    assign trigger = sw[15] ? auto_trigger : !spi_trigger;
     
     // ===== SSI Master Instance =====
     logic [18:0] encoder_position;
@@ -98,7 +98,7 @@ module top_level(
     // Adjust clock frequency based on cable length
     // 500 kHz (short cable <5m)
     logic [9:0] ssi_clk_freq;
-    assign ssi_clk_freq = 10'd500;
+    assign ssi_clk_freq = 12'd1000;
     
     ssi_master #(
         .CLK_FREQ_MHZ(100),

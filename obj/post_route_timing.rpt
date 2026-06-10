@@ -1,8 +1,8 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
 ---------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2025.1 (lin64) Build 6140274 Wed May 21 22:58:25 MDT 2025
-| Date         : Thu Apr 30 20:45:20 2026
-| Host         : eecs-digital-15 running 64-bit Ubuntu 24.04.3 LTS
+| Date         : Sat May  2 14:23:51 2026
+| Host         : eecs-digital-09 running 64-bit Ubuntu 24.04.3 LTS
 | Command      : report_timing -file obj/post_route_timing.rpt
 | Design       : top_level
 | Device       : 7s50-csga324
@@ -12,20 +12,20 @@ Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanc
 
 Timing Report
 
-Slack (MET) :             4.714ns  (required time - arrival time)
-  Source:                 my_uart_transmit/counter_reg[3]/C
+Slack (MET) :             5.227ns  (required time - arrival time)
+  Source:                 ssi_inst/clk_counter_reg[3]/C
                             (rising edge-triggered cell FDRE clocked by gclk  {rise@0.000ns fall@4.000ns period=10.000ns})
-  Destination:            my_uart_transmit/counter_reg[6]/R
+  Destination:            ssi_inst/timer_reg[1]/CE
                             (rising edge-triggered cell FDRE clocked by gclk  {rise@0.000ns fall@4.000ns period=10.000ns})
   Path Group:             gclk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (gclk rise@10.000ns - gclk rise@0.000ns)
-  Data Path Delay:        4.497ns  (logic 0.994ns (22.106%)  route 3.503ns (77.894%))
-  Logic Levels:           3  (LUT4=2 LUT6=1)
-  Clock Path Skew:        -0.022ns (DCD - SCD + CPR)
-    Destination Clock Delay (DCD):    4.758ns = ( 14.758 - 10.000 ) 
-    Source Clock Delay      (SCD):    5.051ns
-    Clock Pessimism Removal (CPR):    0.271ns
+  Data Path Delay:        4.314ns  (logic 0.989ns (22.926%)  route 3.325ns (77.074%))
+  Logic Levels:           3  (LUT4=1 LUT5=1 LUT6=1)
+  Clock Path Skew:        -0.015ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    4.828ns = ( 14.828 - 10.000 ) 
+    Source Clock Delay      (SCD):    5.113ns
+    Clock Pessimism Removal (CPR):    0.270ns
   Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
     Total System Jitter     (TSJ):    0.071ns
     Total Input Jitter      (TIJ):    0.000ns
@@ -40,18 +40,18 @@ Slack (MET) :             4.714ns  (required time - arrival time)
     N15                  IBUF (Prop_ibuf_I_O)         1.440     1.440 r  clk_100mhz_IBUF_inst/O
                          net (fo=1, routed)           1.972     3.412    clk_100mhz_IBUF
     BUFGCTRL_X0Y0        BUFG (Prop_bufg_I_O)         0.096     3.508 r  clk_100mhz_IBUF_BUFG_inst/O
-                         net (fo=304, routed)         1.543     5.051    my_uart_transmit/clk_100mhz_IBUF_BUFG
-    SLICE_X11Y71         FDRE                                         r  my_uart_transmit/counter_reg[3]/C
+                         net (fo=304, routed)         1.605     5.113    ssi_inst/clk_100mhz_IBUF_BUFG
+    SLICE_X5Y73          FDRE                                         r  ssi_inst/clk_counter_reg[3]/C
   -------------------------------------------------------------------    -------------------
-    SLICE_X11Y71         FDRE (Prop_fdre_C_Q)         0.419     5.470 f  my_uart_transmit/counter_reg[3]/Q
-                         net (fo=5, routed)           0.901     6.371    my_uart_transmit/counter_reg[3]
-    SLICE_X11Y71         LUT4 (Prop_lut4_I0_O)        0.299     6.670 r  my_uart_transmit/idx[3]_i_5/O
-                         net (fo=1, routed)           0.526     7.196    my_uart_transmit/idx[3]_i_5_n_0
-    SLICE_X10Y71         LUT6 (Prop_lut6_I0_O)        0.124     7.320 r  my_uart_transmit/idx[3]_i_4/O
-                         net (fo=6, routed)           1.204     8.524    my_uart_transmit/idx[3]_i_4_n_0
-    SLICE_X7Y69          LUT4 (Prop_lut4_I3_O)        0.152     8.676 r  my_uart_transmit/counter[9]_i_1/O
-                         net (fo=10, routed)          0.871     9.547    my_uart_transmit/counter[9]_i_1_n_0
-    SLICE_X10Y71         FDRE                                         r  my_uart_transmit/counter_reg[6]/R
+    SLICE_X5Y73          FDRE (Prop_fdre_C_Q)         0.419     5.532 r  ssi_inst/clk_counter_reg[3]/Q
+                         net (fo=5, routed)           1.022     6.553    ssi_inst/clk_counter_reg_n_0_[3]
+    SLICE_X6Y73          LUT6 (Prop_lut6_I1_O)        0.296     6.849 r  ssi_inst/timer[11]_i_6/O
+                         net (fo=3, routed)           0.608     7.458    ssi_inst/timer[11]_i_6_n_0
+    SLICE_X5Y73          LUT5 (Prop_lut5_I0_O)        0.124     7.582 r  ssi_inst/timer[11]_i_3/O
+                         net (fo=3, routed)           1.034     8.616    ssi_inst/timer[11]_i_3_n_0
+    SLICE_X6Y70          LUT4 (Prop_lut4_I0_O)        0.150     8.766 r  ssi_inst/timer[11]_i_1/O
+                         net (fo=12, routed)          0.661     9.427    ssi_inst/timer[11]_i_1_n_0
+    SLICE_X4Y67          FDRE                                         r  ssi_inst/timer_reg[1]/CE
   -------------------------------------------------------------------    -------------------
 
                          (clock gclk rise edge)      10.000    10.000 r  
@@ -60,16 +60,16 @@ Slack (MET) :             4.714ns  (required time - arrival time)
     N15                  IBUF (Prop_ibuf_I_O)         1.370    11.370 r  clk_100mhz_IBUF_inst/O
                          net (fo=1, routed)           1.868    13.238    clk_100mhz_IBUF
     BUFGCTRL_X0Y0        BUFG (Prop_bufg_I_O)         0.091    13.329 r  clk_100mhz_IBUF_BUFG_inst/O
-                         net (fo=304, routed)         1.429    14.758    my_uart_transmit/clk_100mhz_IBUF_BUFG
-    SLICE_X10Y71         FDRE                                         r  my_uart_transmit/counter_reg[6]/C
-                         clock pessimism              0.271    15.029    
-                         clock uncertainty           -0.035    14.993    
-    SLICE_X10Y71         FDRE (Setup_fdre_C_R)       -0.732    14.261    my_uart_transmit/counter_reg[6]
+                         net (fo=304, routed)         1.499    14.828    ssi_inst/clk_100mhz_IBUF_BUFG
+    SLICE_X4Y67          FDRE                                         r  ssi_inst/timer_reg[1]/C
+                         clock pessimism              0.270    15.098    
+                         clock uncertainty           -0.035    15.062    
+    SLICE_X4Y67          FDRE (Setup_fdre_C_CE)      -0.409    14.653    ssi_inst/timer_reg[1]
   -------------------------------------------------------------------
-                         required time                         14.261    
-                         arrival time                          -9.547    
+                         required time                         14.653    
+                         arrival time                          -9.427    
   -------------------------------------------------------------------
-                         slack                                  4.714    
+                         slack                                  5.227    
 
 
 
