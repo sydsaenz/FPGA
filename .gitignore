@@ -7,3 +7,5 @@
 /vivado*.log
 /clockInfo.txt
 /.Xil/
+/sim_build/
+.vscode-ctags

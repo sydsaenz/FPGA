@@ -2,86 +2,123 @@ import cocotb
 import os
 import random
 import sys
-from math import log
+import math
 import logging
 from pathlib import Path
-from cocotb.clock import Clock
-from cocotb.triggers import Timer, ClockCycles, RisingEdge, FallingEdge, ReadOnly,with_timeout
-from cocotb.utils import get_sim_time as gst
+from cocotb.triggers import Timer
+from cocotb.utils import get_sim_time
 from cocotb.runner import get_runner
+
 test_file = os.path.basename(__file__).replace(".py","")
 
-# utility function to reverse bits:
-def reverse_bits(n,size):
-    reversed_n = 0
-    for i in range(size):
-        reversed_n = (reversed_n << 1) | (n & 1)
-        n >>= 1
-    return reversed_n
+CLK_FREQ_HZ = 100_000_000
+CLK_PERIOD_NS = 1/CLK_FREQ_HZ * 1e9
+BAUD_RATE = 115200
+BAUD_PERIOD_NS = math.floor(CLK_FREQ_HZ/BAUD_RATE) * CLK_PERIOD_NS
 
-# test spi message:
-SPI_RESP_MSG = 0x2345
-#flip them:
-# SPI_RESP_MSG = reverse_bits(SPI_RESP_MSG,16)
+# 100 MHz
+async def generate_clock(clock_wire):
+    while True: # repeat forever
+        clock_wire.value = 0
+        await Timer(CLK_PERIOD_NS/2,units="ns")
+        clock_wire.value = 1
+        await Timer(CLK_PERIOD_NS/2,units="ns")
 
-# this module below is a simple "fake" spi module written in Python that we can...
-# test our design against.
-async def test_spi_device(dut):
-  count = 0
-  count_max = 8 #change for different sizes
-  while True:
-    await RisingEdge(dut.trigger) #listen for falling CS
-    dut.din.value = (SPI_RESP_MSG>>count)&0x1 #feed in lowest bit
-    dut._log.info(f"SPI peripheral Device Sending: {dut.din.value}")
-    count+=1
-    count%=8
-    while dut.busy.value.integer ==1:
-      await RisingEdge(dut.dclk)
-      bit = dut.dout.value.integer #grab value:
-      dut._log.info(f"SPI peripheral Device Receiving: {bit}")
-    #   await FallingEdge(dut.dclk)
-    #   dut.cipo.value = (SPI_RESP_MSG>>count)&0x1 #feed in lowest bit
-    #   dut._log.info(f"SPI peripheral Device Sending: {dut.cipo.value}")
-      count+=1
-      count%=16
+async def uart_byte_interpret(dut):
+    assert dut.busy.value == 1, "expected to be busy but not" 
+
+    assert dut.dout.value == 0, "bad start bit"
+    await Timer(BAUD_PERIOD_NS, "ns")
+
+    assert dut.busy.value == 1, "expected to be busy but not"
+
+    out_byte = 0
+
+    for bit in range(0, 8):
+        assert dut.busy.value == 1, "expected to be busy but not"
+        out_byte += 2**bit * dut.dout.value.integer
+        await Timer(BAUD_PERIOD_NS, "ns")
+
+    assert dut.busy.value == 1, "expected to be busy but not"
+
+    assert dut.dout.value == 1, "bad stop bit"
+    await Timer(BAUD_PERIOD_NS, "ns")
+
+    return out_byte
 
 @cocotb.test()
-async def test_a(dut):
-    """cocotb test for the SPI module"""
-    dut._log.info("Starting...")
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
-    cocotb.start_soon(test_spi_device(dut))
-    dut._log.info("Holding reset...")
-    dut.rst.value = 1
-    dut.trigger.value = 0
-    dut.din.value = 0xEF&0xFF #set in 16 bit input value
-    await ClockCycles(dut.clk, 3) #wait three clock cycles
-    await  FallingEdge(dut.clk)
-    dut.rst.value = 0 #un reset device
-    await ClockCycles(dut.clk, 3) #wait a few clock cycles
-    await  FallingEdge(dut.clk)
-    dut._log.info("Setting Trigger")
-    dut.trigger.value = 1
-    await ClockCycles(dut.clk, 1,rising=False)
-    dut.din.value = 0xAA # once trigger in is off, don't expect data_in to stay the same!!
-    dut.trigger.value = 0
-    await with_timeout(RisingEdge(dut.busy),500000,'ns')
-    await ReadOnly()
-    data_out = dut.dout.value
-    dut._log.info(f"Receiver Data: {data_out}")
-    await ClockCycles(dut.clk, 300)
+async def test_pulse_transmit(dut):
+    await cocotb.start( generate_clock( dut.clk ) )
+    
+    assert dut.dout.value == 1, "bad idle state"
 
-def spi_con_runner():
+    bytes_to_try = [
+        random.randint(0, 255)
+        for _ in range(10)
+    ]
+
+    i = 0
+    for byte in bytes_to_try:
+        print(f"iteration {i}")
+        i += 1
+        dut.din.value = byte
+        assert dut.busy.value == 0, "expected to not be busy but am"
+        dut.trigger.value = 1
+        # wait two clock cycles for ts to start going
+        await Timer(CLK_PERIOD_NS, "ns")
+        dut.trigger.value = 0
+        out_byte = await uart_byte_interpret(dut)
+        assert out_byte == byte, "wrong byte was transmitted"
+        assert dut.busy.value == 0, "expected to not be busy but am"
+
+    await Timer(BAUD_PERIOD_NS, "ns")
+    assert dut.dout.value == 1, "bad idle state"
+
+@cocotb.test()
+async def test_always_transmit(dut):
+    await cocotb.start( generate_clock( dut.clk ) )
+    
+    assert dut.dout.value == 1, "not high when not transmitting"
+
+    bytes_to_try = [
+        random.randint(0, 255)
+        for _ in range(10)
+    ]
+
+    dut.trigger.value = 1
+    dut.din.value = bytes_to_try[0]
+    await Timer(CLK_PERIOD_NS, "ns")
+
+    for i, byte in enumerate(bytes_to_try[0:-1]):
+        print(f"iteration {i}")
+        print(f"{dut.data_buf.value = }, {bin(byte) = }")
+
+        dut.din.value = bytes_to_try[i + 1]
+
+        out_byte = await uart_byte_interpret(dut)
+        assert out_byte == byte, "wrong byte was transmitted"
+
+"""the code below should largely remain unchanged in structure, though the specific files and things
+specified should get updated for different simulations.
+"""
+def counter_runner():
     """Simulate the counter using the Python runner."""
     hdl_toplevel_lang = os.getenv("HDL_TOPLEVEL_LANG", "verilog")
     sim = os.getenv("SIM", "icarus")
     proj_path = Path(__file__).resolve().parent.parent
+    hdl = proj_path / "hdl"
     sys.path.append(str(proj_path / "sim" / "model"))
-    sources = [proj_path / "hdl" / "uart_transmit.sv"]
-    build_test_args = ["-Wall"]
-    parameters = {'INPUT_CLOCK_FREQ' : 100_000_000, 'BAUD_RATE' : 115200} #!!!change these to do different versions
-    sys.path.append(str(proj_path / "sim"))
+    
+    sources = [hdl / "uart_transmit.sv"] #grow/modify this as needed.
+
     hdl_toplevel = "uart_transmit"
+    build_test_args = ["-Wall"]#,"COCOTB_RESOLVE_X=ZEROS"]
+    parameters = {
+        "INPUT_CLOCK_FREQ": CLK_FREQ_HZ,
+        "BAUD_RATE": BAUD_RATE,
+        "DATA_BITS": 8
+    }
+    sys.path.append(str(proj_path / "sim"))
     runner = get_runner(sim)
     runner.build(
         sources=sources,
@@ -99,6 +136,6 @@ def spi_con_runner():
         test_args=run_test_args,
         waves=True
     )
-
+ 
 if __name__ == "__main__":
-    spi_con_runner()
+    counter_runner()

@@ -1,8 +1,12 @@
-`timescale 1ns / 1ps
 `default_nettype none
 
+/* 
+for some reason this module uses SPI mode 1 instead of mode 0?
+*/
 module spi_peripheral
-    #(parameter DATA_WIDTH = 8)
+    #(
+        parameter DATA_WIDTH = 8
+    )
     (
         input wire   clk,           // system clock (100 MHz)
         input wire   rst,           // reset signal
@@ -24,6 +28,11 @@ module spi_peripheral
     logic dclk_rising;
     logic dclk_falling;
     logic cs_falling;
+
+    // Edge detection
+    assign dclk_rising = (dclk_sync[2:1] == 2'b01);
+    assign dclk_falling = (dclk_sync[2:1] == 2'b10);
+    assign cs_falling = (cs_sync[2:1] == 2'b10);
     
     // Data registers
     logic [DATA_WIDTH-1:0] current_data_in;
@@ -40,11 +49,6 @@ module spi_peripheral
             cs_sync <= {cs_sync[1:0], cs};
         end
     end
-    
-    // Edge detection
-    assign dclk_rising = (dclk_sync[2:1] == 2'b01);
-    assign dclk_falling = (dclk_sync[2:1] == 2'b10);
-    assign cs_falling = (cs_sync[2:1] == 2'b10);
 
     logic cipo_internal;
     logic cipo_enable;
@@ -103,7 +107,6 @@ module spi_peripheral
             // CS is high - idle state
             data_valid <= 1'b0;
             busy <= 0;
-            //cipo <= 1'b0;
             cipo_enable <= 1'b0;
             idx <= '0;
         end
@@ -112,5 +115,3 @@ module spi_peripheral
 endmodule
 
 `default_nettype wire
-
-
