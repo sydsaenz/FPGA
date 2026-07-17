@@ -4,6 +4,7 @@ module top_level(
         input wire [15:0] sw, //all 16 input slide switches
         input wire [3:0] btn, //all four momentary button switches
         input wire [7:0] pmoda,
+        inout wire [7:0] pmodb,
         input wire clk_100mhz,
         output logic [15:0] led, //16 green output LEDs (located right above switches)
         output logic [2:0] rgb0, //RGB channels of RGB LED0
@@ -15,9 +16,19 @@ module top_level(
         output logic uart_txd
     );
  
+    logic qspi_clk;
+    logic qspi_cs;
+    logic [3:0] qspi_io;
+    always_comb begin
+        qspi_clk = pmodb[2];
+        qspi_cs = pmodb[5];
+        qspi_io = {pmodb[1], pmodb[7], pmodb[6], pmodb[3]};
+    end
+
     logic [15:0] cos_out;
     logic [15:0] sin_out;
     logic [31:0] display_num;
+    assign display_num = {cos_out, sin_out};
 
     cordic_cossin #(.WIDTH(16), .NUM_ITERATIONS(16)) cordic(
         .clk(clk_100mhz),
@@ -28,7 +39,7 @@ module top_level(
 
     logic [7:0] spi_byte;
     logic data_valid;
-    spi_peripheral #(.DATA_WIDTH(8)) spi(
+    /*spi_peripheral #(.DATA_WIDTH(8)) spi(
         .clk(clk_100mhz),
         .rst(1'b0),
         .data_in('0),
@@ -55,9 +66,20 @@ module top_level(
         .data_out(spi_packet),
         .busy(led[15])
         //.last_sop_buffer(display_num)
+    );*/
+
+    logic [7:0] qspi_byte;
+    parallel_spi_peripheral #(.SENT_DATA_WIDTH(32), .DATA_LINES(4), .CMD_WIDTH(8) )qspi(
+        .clk(clk_100mhz),
+        .rst(1'b0),
+        .data_in(display_num),
+        .cmd_out(qspi_byte),
+        .io(qspi_io),
+        .dclk_in(qspi_clk),
+        .cs_in(qspi_cs)
     );
 
-    assign display_num = spi_packet[0];
+    //assign display_num = spi_packet[0];
     //assign led[14:0] = spi_packet[0][14:0]; 
 
     short7s ss1(
@@ -69,7 +91,7 @@ module top_level(
 
     short7s ss0(
         .clk(clk_100mhz),
-        .num(display_num[31:16]),
+        .num(/*display_num[31:16]*/qspi_byte),
         .anode(ss0_an),
         .cathode(ss0_c)
     );
