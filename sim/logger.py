@@ -1,45 +1,51 @@
 #!/usr/bin/env python3
 import serial
-import csv
-from datetime import datetime
-import sys
 
-PORT = '/dev/ttyUSB0'  # or 'COM3' on Windows
-BAUD = 115200
-FILENAME = f'encoder_log_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+PORT       = '/dev/ttyUSB0'   # or 'COM3' on Windows
+BAUD       = 921600
+SYNC       = 0xA5
+PACKET_LEN = 5
+FILENAME   = 'encoder_positions.csv'
 
-ser = serial.Serial(PORT, BAUD)
+ser = serial.Serial(PORT, BAUD, timeout=1)
 
-with open(FILENAME, 'w', newline='') as csvfile:
-    writer = csv.DictWriter(csvfile, fieldnames=['timestamp', 'position', 'status', 'error', 'warning'])
-    writer.writeheader()
-    
-    print(f"Logging to {FILENAME}")
-    print("Press Ctrl+C to stop\n")
-    
+def parse(buf):
+    """Yield 19-bit positions; return leftover bytes."""
+    i, n = 0, len(buf)
+    out = []
+    while i + PACKET_LEN <= n:
+        if buf[i] != SYNC:
+            i += 1
+            continue
+        b1, b2, b3 = buf[i+1], buf[i+2], buf[i+3]
+        if b3 & 0x08:                       # reserved bit must be 0 -> false sync
+            i += 1
+            continue
+        position = b1 | (b2 << 8) | ((b3 & 0x07) << 16)   # 19-bit position
+        out.append(position)
+        i += PACKET_LEN
+    return out, buf[i:]
+
+with open(FILENAME, 'w') as f:
+    print(f"Logging positions to {FILENAME}\nPress Ctrl+C to stop\n")
+    buf   = bytearray()
+    count = 0
+    lines = []
     try:
         while True:
-            if ser.in_waiting:
-                line = ser.readline().decode('ascii', errors='ignore').strip()
-                if line.startswith('POS:'):
-                    # Parse existing format
-                    # POS:XXXXX STS:XXXX ERR:X WRN:X
-                    parts = line.split()
-                    pos = parts[0].split(':')[1]
-                    sts = parts[1].split(':')[1]
-                    err = parts[2].split(':')[1]
-                    wrn = parts[3].split(':')[1]
-                    
-                    row = {
-                        'timestamp': datetime.now().isoformat(),
-                        'position': pos,
-                        'status': sts,
-                        'error': err,
-                        'warning': wrn
-                    }
-                    writer.writerow(row)
-                    print(f"{row['timestamp']} | POS:{pos} | ERR:{err} WRN:{wrn}")
-    
+            data = ser.read(ser.in_waiting or 1)
+            if data:
+                buf.extend(data)
+                positions, buf = parse(buf)
+                for position in positions:
+                    lines.append(f"{position}\n")
+                    count += 1
+                if len(lines) >= 500:        # batch writes for speed
+                    f.writelines(lines)
+                    lines.clear()
+                    print(f"{count} samples | last POS:{position}")
     except KeyboardInterrupt:
-        print(f"\n\nLogging stopped. Data saved to {FILENAME}")
+        if lines:
+            f.writelines(lines)
+        print(f"\nLogging stopped. {count} positions saved to {FILENAME}")
         ser.close()

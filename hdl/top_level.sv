@@ -22,6 +22,7 @@ module top_level(
 
     input wire              uart_rxd, // UART computer->FPGA
     output logic            uart_txd, // UART FPGA->computer
+    output logic            uart_txd_debug,
 
 
     input wire   copi,          // (Controller-Out-Peripheral-In)
@@ -36,6 +37,8 @@ module top_level(
     logic trigger;
     logic [23:0] auto_trigger_counter;
     logic auto_trigger;
+
+    assign uart_txd_debug = uart_txd;
     
     assign rst = btn[0];
     
@@ -46,7 +49,7 @@ module top_level(
             auto_trigger <= 1'b0;
         end else begin
             // Trigger every 100ms (well above 70us requirement)
-            if (auto_trigger_counter >= 24'd10_000_000) begin
+            if (auto_trigger_counter >= 24'd10_000) begin
                 auto_trigger_counter <= '0;
                 auto_trigger <= 1'b1;
             end else begin
@@ -163,7 +166,7 @@ module top_level(
     
     // Packet format signals
     logic [39:0] uart_packet;
-    logic [55:0] uart_shift_reg;
+    logic [39:0] uart_shift_reg;
     logic [2:0]  uart_byte_count;  // 3 bits to count 0-7
     logic        packet_waiting;
     
@@ -171,20 +174,32 @@ module top_level(
     logic        uart_data_valid;
     logic        uart_busy;
 
+    // always_comb begin
+    //     uart_packet = {
+    //         {error_flag_latched, warning_flag_latched, 6'b000001},
+    //         encoder_status_latched[7:0],
+    //         encoder_position_latched[7:0],
+    //         encoder_position_latched[15:8],
+    //         5'b10000,
+    //         encoder_position_latched[18:16]
+    //     };
+    // end
+
     always_comb begin
         uart_packet = {
-            {error_flag_latched, warning_flag_latched, 6'b000001},
-            encoder_status_latched[7:0],
-            encoder_position_latched[7:0],
-            encoder_position_latched[15:8],
-            5'b10000,
-            encoder_position_latched[18:16]
+            encoder_status_latched[7:0],                          // byte 4: status[7:0]
+            {warning_flag_latched, error_flag_latched,            // byte 3:
+            encoder_status_latched[9:8], 1'b0,                   //  W E S9 S8 0
+            encoder_position_latched[18:16]},                    //  pos[18:16]
+            encoder_position_latched[15:8],                       // byte 2: pos[15:8]
+            encoder_position_latched[7:0],                        // byte 1: pos[7:0]
+            8'hA5                                                 // byte 0: SYNC (sent first)
         };
     end
 
     
     logic [39:0] spi_packet;
-    logic [55:0] spi_shift_reg;
+    logic [39:0] spi_shift_reg;
     logic [2:0]  spi_byte_count;
     logic        spi_byte_valid;
     logic [7:0]  spi_data_to_send;
@@ -198,7 +213,7 @@ module top_level(
 
     always_ff @(posedge clk_100mhz) begin
         if (rst) begin
-            spi_shift_reg          <= 56'd0;
+            spi_shift_reg          <= 40'd0;
             spi_byte_count         <= 3'd0;
             spi_packet_ready       <= 1'b0;
             encoder_data_available <= 1'b0;  // NEW
@@ -214,7 +229,7 @@ module top_level(
         
         // Shift to next byte 
         else if (spi_byte_valid) begin
-            spi_shift_reg  <= {8'd0, spi_shift_reg[55:8]};
+            spi_shift_reg  <= {8'd0, spi_shift_reg[39:8]};
             spi_byte_count <= spi_byte_count + 1'b1;
         end
         
@@ -259,7 +274,7 @@ module top_level(
             send_pending             <= 1'b0;
             
             // UART transmission signals
-            uart_shift_reg           <= 56'd0;
+            uart_shift_reg           <= 40'd0;
             uart_byte_count          <= 3'd0;
             packet_waiting           <= 1'b0; 
         end else begin
@@ -287,7 +302,7 @@ module top_level(
                 if (uart_byte_count == 3'd7) begin  // 0-7 = 8 bytes
                     packet_waiting <= 1'b0;
                 end else begin
-                    uart_shift_reg  <= {8'd0, uart_shift_reg[55:8]};
+                    uart_shift_reg  <= {8'd0, uart_shift_reg[39:8]};
                     uart_byte_count <= uart_byte_count + 1'b1;
                 end
             end
@@ -297,7 +312,7 @@ module top_level(
     uart_transmit
     #(
         .INPUT_CLOCK_FREQ(100_000_000),
-        .BAUD_RATE(115200)
+        .BAUD_RATE(921600)
     ) my_uart_transmit (
         .clk(clk_100mhz),
         .rst(rst),
@@ -312,8 +327,6 @@ module top_level(
     
 
 endmodule
-
-
 
 
 `default_nettype wire

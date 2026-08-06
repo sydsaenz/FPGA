@@ -90,7 +90,7 @@ set_property -dict {PACKAGE_PIN A8  IOSTANDARD LVCMOS33} [ get_ports "sw[15]" ]
 
 # PMOD A Signals
 
-# set_property -dict {PACKAGE_PIN F14 IOSTANDARD LVCMOS33}  [ get_ports "cs" ]
+set_property -dict {PACKAGE_PIN F14 IOSTANDARD LVCMOS33}  [ get_ports "uart_txd_debug" ]
 # set_property -dict {PACKAGE_PIN F15 IOSTANDARD LVCMOS33}  [ get_ports "copi" ]
 # set_property -dict {PACKAGE_PIN H13 IOSTANDARD LVCMOS33}  [ get_ports "cipo" ]
 # set_property -dict {PACKAGE_PIN H14 IOSTANDARD LVCMOS33}  [ get_ports "dclk" ]
@@ -100,11 +100,11 @@ set_property -dict {PACKAGE_PIN A8  IOSTANDARD LVCMOS33} [ get_ports "sw[15]" ]
 #set_property -dict {PACKAGE_PIN E15 IOSTANDARD LVCMOS33}  [ get_ports "pmoda[7]" ]
 
 
-set_property -dict {PACKAGE_PIN F14 IOSTANDARD LVCMOS33} [get_ports "dclk_plus"]
-set_property -dict {PACKAGE_PIN F15 IOSTANDARD LVCMOS33} [get_ports "dclk_minus"]
+set_property -dict {PACKAGE_PIN H14 IOSTANDARD LVCMOS33} [get_ports "dclk_plus"]
+set_property -dict {PACKAGE_PIN E15 IOSTANDARD LVCMOS33} [get_ports "dclk_minus"]
 
 set_property -dict {PACKAGE_PIN H13 IOSTANDARD LVCMOS33} [get_ports "data_plus"]
-set_property -dict {PACKAGE_PIN H14 IOSTANDARD LVCMOS33} [get_ports "data_minus"]
+set_property -dict {PACKAGE_PIN E14 IOSTANDARD LVCMOS33} [get_ports "data_minus"]
 
 # PMOD B Signals
 ##fixed K14 and J15 which were a copy-paste and wrong.
