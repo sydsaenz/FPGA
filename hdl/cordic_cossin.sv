@@ -25,7 +25,7 @@ module cordic_cossin #(parameter WIDTH = 16, parameter NUM_ITERATIONS=16) (
     function automatic logic signed [WIDTH-1:0] get_fixed_angle(int i);
         real fixed_angle_tan = 0.5**(real'(i));
         real out = $atan(fixed_angle_tan) / (2.0 * PI) * (2.0**WIDTH);
-        return $floor(out);
+        return signed'(WIDTH'(int'($floor(out))));
     endfunction 
 
     function automatic logic signed [WIDTH-1:0] trim_overflow_bit(logic signed [WIDTH:0] inp);
@@ -40,7 +40,7 @@ module cordic_cossin #(parameter WIDTH = 16, parameter NUM_ITERATIONS=16) (
     
     /* need 1 extra bit on x_pipe and y_pipe to avoid overflow/underflow
     when sin/cos are about 1 or -1*/
-    localparam logic signed [WIDTH:0] X_INIT = (SCALING_FACTOR_REAL * 2.0**(WIDTH-1));
+    localparam logic signed [WIDTH:0] X_INIT = (WIDTH + 1)'(longint'(SCALING_FACTOR_REAL * 2.0**(real'(WIDTH) - 1.0)));
     localparam logic signed [WIDTH:0] Y_INIT = 0;
     logic signed [WIDTH:0] x_pipe [0:NUM_ITERATIONS];
     logic signed [WIDTH:0] y_pipe [0:NUM_ITERATIONS];
