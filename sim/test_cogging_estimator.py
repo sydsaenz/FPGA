@@ -14,16 +14,16 @@ test_file = os.path.basename(__file__).replace(".py","")
 
 CLK_FREQ_HZ = 100_000_000
 CLK_PERIOD_NS = 1/CLK_FREQ_HZ * 1e9
-SAMPLE_FREQ_HZ = 1_000_000
+SAMPLE_FREQ_HZ = 100_000
 CLK_CYCLES_PER_SAMPLE = math.floor(CLK_FREQ_HZ/SAMPLE_FREQ_HZ)
 
-NUM_POLE_PAIRS = 24
+NUM_POLE_PAIRS = 50
 BIT_WIDTH = 64
-FRACTION_BITS = 24
+FRACTION_BITS = 18
 POS_WIDTH = 24
 EMA_ALPHA = 0.3
-LEARNING_RATE = 0.001
-NUM_HARMONICS = 8
+LEARNING_RATE = 0.1
+NUM_HARMONICS = 4
 
 # 100 MHz
 
@@ -53,7 +53,7 @@ async def test_always_transmit(dut):
     dut.rst.value = 0
 
     target_vel = (2**POS_WIDTH) * 10
-    current_vel = target_vel
+    current_vel = target_vel + 0.01
     angle = 0.0
 
     dt_ns = CLK_PERIOD_NS * CLK_CYCLES_PER_SAMPLE
@@ -61,42 +61,34 @@ async def test_always_transmit(dut):
 
     DISTURBANCE_FREQUENCIES = []
     for harmonic in range(1, 4 + 1):
-        unit = (target_vel * 0.1)/harmonic
+        unit = (target_vel * 0.4)/harmonic
         DISTURBANCE_FREQUENCIES.append(
             (
                 unit * random.uniform(-1.0, 1.0),
                 unit * random.uniform(-1.0, 1.0),
-                harmonic * NUM_POLE_PAIRS * 100
+                harmonic * NUM_POLE_PAIRS
             )
         )
-
-    last_angle = angle
-
-    # wait some random number of cycles so our samples fall in the middle
-    await Timer(CLK_PERIOD_NS * 18, units="ns")
 
     for i in range(1000):
 
         dut.pos.value = int(angle) % 2**POS_WIDTH
         dut.vel_command_fxp.value = int(target_vel * 2.0**(FRACTION_BITS))
+        
         x_series.append(i * dt_s)
-        target_velocity_series.append(current_vel)
-
-        vel_estimate = dut.vel_estimate_fxp.value.signed_integer / 2.0**FRACTION_BITS
-        motor_velocity_series.append(vel_estimate)
-
-
-        if vel_estimate > current_vel * 1.5:
-            print(f"spike detected, {last_angle = } {angle = } {dut.pos.value.integer = }")
+        target_velocity_series.append(target_vel)
+        motor_velocity_series.append(current_vel)
 
         await Timer(dt_ns, units="ns")
-        disturbance = eval_freq_sum(DISTURBANCE_FREQUENCIES, angle/(2.0**POS_WIDTH) * 2.0 * math.pi)
-        cancellation_effort = float(dut.cogging_amt_fxp_out.value.signed_integer) / 2.0**(FRACTION_BITS)
-        current_vel = target_vel #+ disturbance #+ cancellation_effort
-        last_angle = angle
+
+        angle_in_rad = angle/(2.0**POS_WIDTH) * 2.0 * math.pi
+        disturbance = eval_freq_sum(DISTURBANCE_FREQUENCIES, angle_in_rad)
+        cancellation_effort = float(dut.cogging_amt_fxp_out.value.signed_integer) / 2.0**FRACTION_BITS
+
+        current_vel = target_vel + disturbance + cancellation_effort
         angle += current_vel * dt_s
 
-    plt.ylim(0, 4 * target_vel)
+    plt.ylim(0, 2 * target_vel)
     plt.plot(x_series, motor_velocity_series)
     plt.plot(x_series, target_velocity_series)
     plt.show()

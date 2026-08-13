@@ -24,6 +24,10 @@ class CordicModule():
         self._y_init = 0
 
     def cossin(self, angle):
+        # wrap to -180, +180 range
+        old_angle = angle
+        angle = 2 * (angle % 2**(self._width - 1)) - angle % 2**self._width
+        print(f"old angle: {round(old_angle/2**self._width * 360)} new angle: {round(angle/2**self._width * 360)}")
         quadrant = (angle % 2**self._width) >> (self._width - 2)
         print(f"{angle = } aka {round(angle/2**self._width * 360)} {quadrant = }")
         should_flip = quadrant == 1 or quadrant == 2
@@ -54,11 +58,19 @@ class CordicModule():
         return stages
 
     def cossin_f(self, angle):
-        return self.cossin((angle/(2 * math.pi)) * 2**self._width)
+        return self.cossin( round((angle/(2 * math.pi)) * 2**self._width) )
 
     def to_f(self, tup):
-        return (tup[0]/(2**(self._width-1)), tup[1]/(2**(self._width-1)))
+        return (tup[-1][0]/(2**(self._width-1)), tup[-1][1]/(2**(self._width-1)))
 
 if __name__ == "__main__":
-    module = CordicModule(16, 16)
-    print(module.to_f(module.cossin(-0x2000)[-1]))
+    module = CordicModule(24, 24)
+
+    # do a sweep
+    max_num = 24
+    for i in range(max_num):
+        angle = (i/max_num) * 2.0 * math.pi
+        print("--------------")
+        print(module.to_f(module.cossin_f(angle)))
+        print(math.cos(angle))
+        print(math.sin(angle))

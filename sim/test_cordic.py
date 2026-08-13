@@ -35,11 +35,10 @@ async def first_test(dut):
     angles_to_try.extend([90, -90, 179, -180])
 
     for angle in angles_to_try:
-        scaled_angle = int((2**WIDTH) * (angle/360))
+        scaled_angle = int(2**WIDTH * (angle/360))
         py_out = py_cordic.cossin(scaled_angle)
         dut.angle.value = scaled_angle
         await Timer(5, "us")
-        print(angle)
         #for i in range(NUM_ITERATIONS+1):
         #    print("---------")
         #    print(f"x_{i} | fpga: {hex(dut.x_pipe[i].value.signed_integer)} py: {hex(py_out[i][0])}")

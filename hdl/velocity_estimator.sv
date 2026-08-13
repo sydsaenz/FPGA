@@ -31,7 +31,7 @@ module velocity_estimator #(parameter int INPUT_WIDTH, int OUTPUT_WIDTH, int CLK
             last_pos <= pos;
             velocity_intermediate <= 0;
             new_data_intermediate <= 0;
-        end else if (timer_count == TIMER_COUNT_WIDTH'(CLK_CYCLES_PER_SAMPLE)) begin
+        end else if (timer_count == TIMER_COUNT_WIDTH'(CLK_CYCLES_PER_SAMPLE - 1)) begin
             timer_count <= 0;
             last_pos <= pos;
 

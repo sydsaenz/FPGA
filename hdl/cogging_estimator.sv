@@ -15,8 +15,6 @@
 // has the benefit of potentially being smoother at higher velocities
 
 
-
-
 module cogging_estimator #(parameter
     int NUM_HARMONICS,
     int TEETH_PER_REVOLUTION,
@@ -51,6 +49,10 @@ module cogging_estimator #(parameter
         return signed'((WIDTH)'(intermediate >>> FRACTION_BITS));
     endfunction
 
+    function automatic logic signed [WIDTH-1:0] abs(logic signed [WIDTH-1:0] num);
+        return num[WIDTH-1] ? -num : num;
+    endfunction
+
     localparam logic signed [WIDTH-1:0] ema_alpha_fxp = real_to_signed_fxp(EMA_ALPHA);
     localparam logic signed [WIDTH-1:0] learning_rate_fxp = real_to_signed_fxp(LEARNING_RATE);
 
@@ -58,8 +60,9 @@ module cogging_estimator #(parameter
     logic signed [WIDTH-1:0] sin_coefficients_fxp [NUM_HARMONICS-1:0];
 
     logic signed [NUM_HARMONICS-1:0][WIDTH-1:0] cogging_amt_fxp_adder_queue;
-    logic signed [WIDTH-1:0] cogging_amt_fxp_total = 0;
-    assign cogging_amt_fxp_out = cogging_amt_fxp_total;
+    logic signed [WIDTH-1:0] cogging_amt_fxp_total = '0;
+    logic signed [WIDTH-1:0] cogging_amt_fxp_out_intermediate = '0;
+    assign cogging_amt_fxp_out = cogging_amt_fxp_out_intermediate;
 
     logic is_vel_estimate_new = '0;
     logic signed [WIDTH-1:0] vel_error_fxp = '0;
@@ -81,33 +84,41 @@ module cogging_estimator #(parameter
     logic signed [WIDTH-1:0] learning_rate_times_vel_error_fxp;
     assign learning_rate_times_vel_error_fxp = fxp_signed_multiply(learning_rate_fxp, vel_error_fxp);
 
+    logic signed [WIDTH-1:0] cos_reference_fxp [NUM_HARMONICS-1:0];
+    logic signed [WIDTH-1:0] sin_reference_fxp [NUM_HARMONICS-1:0];
+    logic signed [POS_WIDTH-1:0] scaled_pos [NUM_HARMONICS-1:0];
+
     // sum up terms of fourier series and put on output
     generate
         genvar i;
         for (i = 0; i < NUM_HARMONICS; i++) begin
-            logic signed [WIDTH-1:0] cos_reference_fxp;
-            logic signed [WIDTH-1:0] sin_reference_fxp;
-            assign cos_reference_fxp[WIDTH-1:FRACTION_BITS] = '0;
-            assign sin_reference_fxp[WIDTH-1:FRACTION_BITS] = '0;
+            logic signed [FRACTION_BITS-1:0] cos_intermediate; // to allow for signed integer width casting
+            logic signed [FRACTION_BITS-1:-0] sin_intermediate; // ^^^
+            assign cos_reference_fxp[i] = WIDTH'(cos_intermediate);
+            assign sin_reference_fxp[i] = WIDTH'(sin_intermediate);
+            assign scaled_pos[i] = pos * signed'(POS_WIDTH'((i + 1) * TEETH_PER_REVOLUTION));
             cordic_cossin #(.WIDTH(FRACTION_BITS), .NUM_ITERATIONS(FRACTION_BITS)) cordic(
                 .clk(clk),
                 .angle(
-                    POS_WIDTH > FRACTION_BITS ? FRACTION_BITS'(pos * i * TEETH_PER_REVOLUTION >>> (POS_WIDTH - FRACTION_BITS))
-                    : FRACTION_BITS'(pos * i * TEETH_PER_REVOLUTION <<< (FRACTION_BITS - POS_WIDTH)) ),
-                .cos(cos_reference_fxp[FRACTION_BITS-1:0]),
-                .sin(sin_reference_fxp[FRACTION_BITS-1:0])
+                    /* verilator lint_off WIDTHEXPAND */
+                    (POS_WIDTH > FRACTION_BITS) ? FRACTION_BITS'( scaled_pos[i] >>> (POS_WIDTH - FRACTION_BITS) )
+                    : FRACTION_BITS'(scaled_pos[i]) <<< (FRACTION_BITS - POS_WIDTH)
+                    /* verilator lint_on WIDTHEXPAND */
+                ),
+                .cos(cos_intermediate),
+                .sin(sin_intermediate)
             );
             
             always_ff @(posedge clk) begin
                 if (is_vel_estimate_new) begin
                     cos_coefficients_fxp[i] <= cos_coefficients_fxp[i] + fxp_signed_multiply(
-                        learning_rate_times_vel_error_fxp, cos_reference_fxp
+                        learning_rate_times_vel_error_fxp, cos_reference_fxp[i]
                     );
                     sin_coefficients_fxp[i] <= sin_coefficients_fxp[i] + fxp_signed_multiply(
-                        learning_rate_times_vel_error_fxp, sin_reference_fxp
+                        learning_rate_times_vel_error_fxp, sin_reference_fxp[i]
                     );
-                    cogging_amt_fxp_adder_queue[i] <= fxp_signed_multiply(cos_coefficients_fxp[i], cos_reference_fxp)
-                        + fxp_signed_multiply(sin_coefficients_fxp[i], sin_reference_fxp);
+                    cogging_amt_fxp_adder_queue[i] <= fxp_signed_multiply(cos_coefficients_fxp[i], cos_reference_fxp[i])
+                        + fxp_signed_multiply(sin_coefficients_fxp[i], sin_reference_fxp[i]);
                 end
             end
         end
@@ -120,8 +131,13 @@ module cogging_estimator #(parameter
                 ema_alpha_fxp
             );
             cogging_amt_fxp_total <= 0;
+        end else if (cogging_amt_fxp_adder_queue[0] == ~WIDTH'(0)) begin
+        end else if (cogging_amt_fxp_adder_queue[1] == ~WIDTH'(0) ) begin
+            cogging_amt_fxp_out_intermediate <= cogging_amt_fxp_total + cogging_amt_fxp_adder_queue[0];
+            cogging_amt_fxp_adder_queue <= {~WIDTH'(0), cogging_amt_fxp_adder_queue[NUM_HARMONICS-1:1]};
+            cogging_amt_fxp_total <= cogging_amt_fxp_total + cogging_amt_fxp_adder_queue[0];
         end else begin
-            cogging_amt_fxp_adder_queue <= cogging_amt_fxp_adder_queue >> WIDTH;
+            cogging_amt_fxp_adder_queue <= {~WIDTH'(0), cogging_amt_fxp_adder_queue[NUM_HARMONICS-1:1]};
             cogging_amt_fxp_total <= cogging_amt_fxp_total + cogging_amt_fxp_adder_queue[0];
         end
     end

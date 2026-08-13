@@ -8,4 +8,5 @@
 /clockInfo.txt
 /.Xil/
 /sim_build/
+/sim/sim_build/
 .vscode-ctags
