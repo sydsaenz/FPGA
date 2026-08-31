@@ -1,11 +1,11 @@
 `default_nettype none
 //`timescale 1ns/1ps
 
-/* module that concatenates multiple transmissions into one big data block
-after receiving a start-of-packet signal */
+/* Concatenates multiple transmissions (e.g. 8-bit UART transmissions) into
+one data block after receiving a start-of-packet signal. */
 module packet_receiver #(
     parameter WORDS, // # of transmissions in a packet, not including start of packet
-    parameter WORD_WIDTH, // 8 if you receive one byte at a time, etc.
+    parameter WORD_WIDTH, // bit-width of a word
     parameter SOP_WORDS = 1, // # of transmissions in the SOP
     parameter logic [SOP_WORDS-1:0][WORD_WIDTH-1:0] START_OF_PACKET,
     parameter logic LITTLE_WORD_ORDER = 1'b1, // 1 if the word at index 0 is received first
@@ -14,7 +14,7 @@ module packet_receiver #(
     input wire clk,
     input wire [WORD_WIDTH-1:0] word_in,
     input wire should_sample, // word_in will be sampled every clock cycle this is high 
-    output logic [WORDS-1:0][WORD_WIDTH-1:0] data_out, // little-endian output
+    output logic [WORDS-1:0][WORD_WIDTH-1:0] data_out, // output (little endian)
     output logic busy
 );
 

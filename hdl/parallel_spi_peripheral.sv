@@ -1,22 +1,27 @@
 `default_nettype none
 
-// spi mode 0
+/*
+* Generic module that implements a Mode 0 dual/quad/octal SPI peripheral.
+
+* As of now, it works as follows:
+* CMD_WIDTH bits are read on all of the IO lines and read into final_cmd;
+* when final_cmd == 0xAF, the module will copy the current value of data_in
+* and put it on the IO lines.
+*/
 module parallel_spi_peripheral
     #(
-        parameter SENT_DATA_WIDTH,
-        parameter DATA_LINES,
-        parameter CMD_WIDTH
+        parameter SENT_DATA_WIDTH, // Bit width of data_in.
+        parameter DATA_LINES, // # of IO lines (2 for dual SPI, 4 for quad, etc.)
+        parameter CMD_WIDTH // Bit width of a command from the master.
     )
     (
-        input wire   clk,           // system clock (100 MHz)
-        input wire   rst,           // reset signal
-        input wire   [SENT_DATA_WIDTH-1:0] data_in,  // data to send to controller
-        output logic [CMD_WIDTH-1:0] cmd_out, // command from qspi master
-        output logic data_valid,    // high when output data is present
-        output logic busy,
-        inout wire [DATA_LINES-1:0] io,
-        input wire   dclk_in,          // (Data Clock) - from controller
-        input wire   cs_in             // (Chip Select) - from controller
+        input wire   clk, // System clock (100 MHz)
+        input wire   rst, // reset signal
+        input wire   [SENT_DATA_WIDTH-1:0] data_in,  // Data to send to master.
+        output logic [CMD_WIDTH-1:0] cmd_out, // Command from the master.
+        inout wire [DATA_LINES-1:0] io, // IO lines.
+        input wire   dclk_in, // SPI clock.
+        input wire   cs_in // Chip select.
     );
 
     function int ceil_div(input int a, input int b);

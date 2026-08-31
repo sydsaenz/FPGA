@@ -1,21 +1,24 @@
 `default_nettype none
 
-// transmits a byte over UART when trigger is high
-module uart_transmit #(parameter INPUT_CLOCK_FREQ, parameter BAUD_RATE, parameter DATA_BITS) (
-    input wire clk,
-    input wire rst,
-    input wire [7:0] din,
-    input wire trigger,
-    output logic busy = 1'b0,
-    output logic dout = 1'b1
+/* Outputs a byte(ish) as a UART transmission. */
+module uart_transmit #(
+    parameter INPUT_CLOCK_FREQ, // System clock frequency.
+    parameter BAUD_RATE, // Baud rate.
+    parameter DATA_BITS // Data bits in one transmission.
+) (
+    input wire clk, // System clock.
+    input wire [DATA_BITS-1:0] din, // Input byte(ish).
+    input wire trigger, // Transmit as long as this is high.
+    output logic busy = 1'b0, // High when a transmission is in progress.
+    output logic dout = 1'b1 // UART output.
 );
 
     localparam logic [31:0] PERIOD = INPUT_CLOCK_FREQ/BAUD_RATE - 1;
     localparam int TOTAL_BITS = DATA_BITS + 2;
 
-    logic [7:0] data_buf = 8'hFF;
-    logic [31:0] count = PERIOD;
-    logic [3:0] bits_sent = 11;
+    logic [DATA_BITS-1:0] data_buf = 8'hFF;
+    logic [$clog2(PERIOD+1):0] count = PERIOD;
+    logic [$clog2(DATA_BITS+1):0] bits_sent = 11;
 
     always_ff @(posedge clk) begin
 

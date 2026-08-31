@@ -1,14 +1,18 @@
 `default_nettype none
 
 /*
-when trigger is high, outputs din as a series of UART transmissions on dout
+Outputs an input buffer as a series of UART transmissions.
 */
-module uart_struct_transmit #(parameter WORDS, DATA_BITS, INPUT_CLOCK_FREQ, BAUD_RATE) (
-    input wire clk,
-    input wire [(WORDS * DATA_BITS - 1):0] din,
-    input wire trigger,
-    output logic busy,
-    output logic dout
+module uart_struct_transmit #(parameter
+    WORDS, // # of UART transmissions in the input buffer.
+    DATA_BITS, // # of bits in a UART transmission.
+    INPUT_CLOCK_FREQ, // System clock frequency.
+    BAUD_RATE // UART baud rate.
+) (
+    input wire clk, // System clock.
+    input wire [(WORDS * DATA_BITS - 1):0] din, // Input buffer.
+    input wire trigger, // Will transmit as long as this is high.
+    output logic dout // UART output.
 );
 
     localparam TOTAL_BITS = WORDS * DATA_BITS;

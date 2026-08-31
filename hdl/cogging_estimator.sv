@@ -1,35 +1,52 @@
 `default_nettype none
 
-// we need to know the exact sample period in advance to do velocity estimation
-// we can't have a trigger line because then we would have to divide by the time
-// between triggers to determine change in pos per unit time
-// this also needs to be coordinated with encoder reads to avoid having
-// huge velocity estimate spikes immediately after a read and a zero velocity estimate between reads
-
-// solution: read from the encoder and do velocity estimation in one module?
-// this also neatly packs data about both position and velocity in one module
-// the velocity ERROR measuring can be handled elsewhere and at a much higher clock speed
 
 
-// or: extrapolate velocity estimate data
-// has the benefit of potentially being smoother at higher velocities
-
-
+/*
+* Learns a disturbance signal for a motor given an encoder position and a velocity command. 
+*/
 module cogging_estimator #(parameter
-    int NUM_HARMONICS,
-    int TEETH_PER_REVOLUTION,
-    int WIDTH,
-    int POS_WIDTH,
-    int FRACTION_BITS,
+    int NUM_HARMONICS, // Number of harmonics to estimate.
+    int TEETH_PER_REVOLUTION, // Number of motor phases.
+    int WIDTH, // Bit-width of fixed-point decimal calculations.
+    int POS_WIDTH, // Bit-width of the encoder reading.
+    
+    /* # of bits (out of WIDTH) dedicated to the fractional component
+    for fixed-point calculations. */
+    int FRACTION_BITS, 
+
+    /* How many clock cycles between each new position sample.
+    This should be greater than FRACTION_BITS + NUM_HARMONICS,
+    since it takes FRACTION_BITS clock cycles for a new result
+    to appear at the output of the cordic_cossin module
+    and NUM_HARMONICS clock cycles to add together each harmonic.
+
+    The second problem could probably be significantly mitigated
+    by using a binary tree sort of combinational structure to add
+    together the harmonics, rather than sequential logic. */
     int CLK_CYCLES_PER_SAMPLE,
-    int INPUT_CLK_FREQ,
+
+    int INPUT_CLK_FREQ, // System clock frequency.
+    
+    /* Alpha for the EMA filter used to smooth out velocity error.
+    Interally, this is converted to a fixed-point decimal. */
     real EMA_ALPHA,
+
+    /* Learning rate for the Widrow-Hoff estimator.
+    Internally, this is converted to a fixed-point decimal. */
     real LEARNING_RATE
 ) (
-    input wire clk,
+    input wire clk, // System clock.
     input wire rst,
-    input wire signed [POS_WIDTH-1:0] pos,
+
+    /* Encoder reading. The lowest possible value corresponds to -180 degrees,
+    the highest possible value corresponds to +180 degrees. */
+    input wire signed [POS_WIDTH-1:0] pos, 
+
+    // Velocity command as a fixed-point number with FRACTION_BITS bits.
     input wire signed [WIDTH-1:0] vel_command_fxp,
+
+    // Estimated disturbance signal.
     output logic signed [WIDTH-1:0] cogging_amt_fxp_out
 );
 
@@ -125,17 +142,24 @@ module cogging_estimator #(parameter
     endgenerate
 
     always_ff @(posedge clk) begin
+        // if we have a new velocity estimate, reset the cogging amt estimate
         if (is_vel_estimate_new) begin
             vel_error_fxp <= vel_error_fxp + fxp_signed_multiply(
                 (vel_command_fxp - vel_estimate_fxp) - vel_error_fxp,
                 ema_alpha_fxp
             );
             cogging_amt_fxp_total <= 0;
-        end else if (cogging_amt_fxp_adder_queue[0] == ~WIDTH'(0)) begin
+
+        // do nothing if the adder queue is empty
+        end else if (cogging_amt_fxp_adder_queue[0] == ~WIDTH'(0)) begin 
+
+        // if the adder queue has one element, add it to the total and simultaneously put the result on the output 
         end else if (cogging_amt_fxp_adder_queue[1] == ~WIDTH'(0) ) begin
             cogging_amt_fxp_out_intermediate <= cogging_amt_fxp_total + cogging_amt_fxp_adder_queue[0];
             cogging_amt_fxp_adder_queue <= {~WIDTH'(0), cogging_amt_fxp_adder_queue[NUM_HARMONICS-1:1]};
             cogging_amt_fxp_total <= cogging_amt_fxp_total + cogging_amt_fxp_adder_queue[0];
+
+        // if the adder queue has more than one element, just add it normally
         end else begin
             cogging_amt_fxp_adder_queue <= {~WIDTH'(0), cogging_amt_fxp_adder_queue[NUM_HARMONICS-1:1]};
             cogging_amt_fxp_total <= cogging_amt_fxp_total + cogging_amt_fxp_adder_queue[0];
