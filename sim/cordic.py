@@ -17,7 +17,7 @@ class CordicModule():
         self._width = width
         self._num_iterations = num_iterations
         self._fixed_angles = [
-            math.floor(math.atan(2**(-i))/(2 * math.pi) * 2**width)
+            round(math.atan(2**(-i))/(2 * math.pi) * 2**width)
             for i in range(num_iterations)
         ]
         self._x_init = math.floor(2**(width - 1) * SCALING_FACTOR)

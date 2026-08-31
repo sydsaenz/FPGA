@@ -1,11 +1,13 @@
 `default_nettype none
 
 /*
-given an input angle in the range 0 to 2^WIDTH (corresponding to 0-360 degrees),
-outputs the cosine and sine of that angle as signed integers in the range
--2^(WIDTH - 1) to 2^(WIDTH - 1)
+Given an input angle in the range -2^(WIDTH-1) to 2^(WIDTH-1)-1 (corresponding to -180 to 180 degrees),
+outputs the cosine and sine of that angle as signed integers in the range -2^(WIDTH - 1) to 2^(WIDTH - 1).
 */
-module cordic_cossin #(parameter WIDTH = 16, parameter NUM_ITERATIONS=16) (
+module cordic_cossin #(
+    parameter WIDTH = 16, // Bit width of the input and output.
+    parameter NUM_ITERATIONS=16 // Number of CORDIC iterations to perform.
+) (
     input wire clk,
     input wire signed [WIDTH-1:0] angle,
     output logic signed [WIDTH-1:0] cos,
@@ -25,7 +27,7 @@ module cordic_cossin #(parameter WIDTH = 16, parameter NUM_ITERATIONS=16) (
     function automatic logic signed [WIDTH-1:0] get_fixed_angle(int i);
         real fixed_angle_tan = 0.5**(real'(i));
         real out = $atan(fixed_angle_tan) / (2.0 * PI) * (2.0**WIDTH);
-        return signed'(WIDTH'(int'($floor(out))));
+        return signed'(WIDTH'(int'(out)));
     endfunction 
 
     function automatic logic signed [WIDTH-1:0] trim_overflow_bit(logic signed [WIDTH:0] inp);
