@@ -29,7 +29,6 @@ module uart_struct_transmit #(parameter
     word_transmitter(
         .clk(clk),
         .trigger(should_transmit),
-        .rst(1'b0),
         .busy(sending_word),
         .din(data_buf[DATA_BITS - 1:0]),
         .dout(dout)
