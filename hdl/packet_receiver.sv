@@ -21,9 +21,7 @@ module packet_receiver #(
     localparam int IDX_WIDTH = $clog2(WORDS) + 1;
     localparam logic [IDX_WIDTH-1:0] MAX_IDX = IDX_WIDTH'(WORDS); 
 
-    /* verilator lint_off PROCASSINIT */
     logic [IDX_WIDTH-1:0] idx = MAX_IDX;
-    /* verilator lint_on PROCASSINIT */
 
     logic [WORD_WIDTH-1:0] logical_word_in;
     assign logical_word_in = LITTLE_BIT_ORDER
