@@ -22,7 +22,7 @@ BIT_WIDTH = 64
 FRACTION_BITS = 18
 POS_WIDTH = 24
 EMA_ALPHA = 0.3
-LEARNING_RATE = 0.1
+LEARNING_RATE = 0.005
 NUM_HARMONICS = 4
 
 # 100 MHz
@@ -52,8 +52,8 @@ async def test_always_transmit(dut):
     dut.pos.value = 0
     dut.rst.value = 0
 
-    target_vel = (2**POS_WIDTH) * 10
-    current_vel = target_vel + 0.01
+    target_vel_basis = (2**POS_WIDTH) * 10
+    current_vel = target_vel_basis + 0.01
     angle = 0.0
 
     dt_ns = CLK_PERIOD_NS * CLK_CYCLES_PER_SAMPLE
@@ -61,7 +61,7 @@ async def test_always_transmit(dut):
 
     DISTURBANCE_FREQUENCIES = []
     for harmonic in range(1, 4 + 1):
-        unit = (target_vel * 0.4)/harmonic
+        unit = (target_vel_basis * 0.4)/harmonic
         DISTURBANCE_FREQUENCIES.append(
             (
                 unit * random.uniform(-1.0, 1.0),
@@ -70,7 +70,32 @@ async def test_always_transmit(dut):
             )
         )
 
-    for i in range(1000):
+    NUM_ITERATIONS = SAMPLE_FREQ_HZ
+    DURATION = dt_s * NUM_ITERATIONS
+
+    VELOCITY_FREQUENCIES = []
+    for harmonic in range(1, 4 + 1):
+        unit = (target_vel_basis * 2.0)/harmonic
+        VELOCITY_FREQUENCIES.append(
+            (
+                unit * random.uniform(-1.0, 1.0),
+                unit * random.uniform(-1.0, 1.0),
+                harmonic * math.pi
+            )
+        )
+
+    for i in range(NUM_ITERATIONS):
+
+
+        target_vel = target_vel_basis + eval_freq_sum(VELOCITY_FREQUENCIES, i * dt_s) + target_vel_basis * math.sin(round(i/NUM_ITERATIONS * 8) + 10) * 0.4
+        
+        # dumb motor kinematics
+        angle_in_rad = angle/(2.0**POS_WIDTH) * 2.0 * math.pi
+        disturbance = eval_freq_sum(DISTURBANCE_FREQUENCIES, angle_in_rad)
+        cancellation_effort = float(dut.cogging_amt_fxp_out.value.signed_integer) / 2.0**FRACTION_BITS
+
+        current_vel = target_vel + disturbance + cancellation_effort
+        angle += current_vel * dt_s
 
         dut.pos.value = int(angle) % 2**POS_WIDTH
         dut.vel_command_fxp.value = int(target_vel * 2.0**(FRACTION_BITS))
@@ -81,14 +106,9 @@ async def test_always_transmit(dut):
 
         await Timer(dt_ns, units="ns")
 
-        angle_in_rad = angle/(2.0**POS_WIDTH) * 2.0 * math.pi
-        disturbance = eval_freq_sum(DISTURBANCE_FREQUENCIES, angle_in_rad)
-        cancellation_effort = float(dut.cogging_amt_fxp_out.value.signed_integer) / 2.0**FRACTION_BITS
+        
 
-        current_vel = target_vel + disturbance + cancellation_effort
-        angle += current_vel * dt_s
-
-    plt.ylim(0, 2 * target_vel)
+    plt.ylim(-2 * target_vel_basis, 4 * target_vel_basis)
     plt.plot(x_series, motor_velocity_series)
     plt.plot(x_series, target_velocity_series)
     plt.show()
