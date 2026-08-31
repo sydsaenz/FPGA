@@ -1,17 +1,18 @@
 `default_nettype none
 
 /*
-Given an input angle in the range -2^(WIDTH-1) to 2^(WIDTH-1)-1 (corresponding to -180 to 180 degrees),
-outputs the cosine and sine of that angle as signed integers in the range -2^(WIDTH - 1) to 2^(WIDTH - 1).
+Given an input angle in the range -2^(WIDTH-1) to 2^(WIDTH-1)-1
+(corresponding to -180 to 180 degrees), outputs the cosine and sine
+of that angle as signed integers in the range -2^(WIDTH - 1) to 2^(WIDTH - 1).
 */
 module cordic_cossin #(
     parameter WIDTH = 16, // Bit width of the input and output.
     parameter NUM_ITERATIONS=16 // Number of CORDIC iterations to perform.
 ) (
-    input wire clk,
-    input wire signed [WIDTH-1:0] angle,
-    output logic signed [WIDTH-1:0] cos,
-    output logic signed [WIDTH-1:0] sin
+    input wire clk, // System clock.
+    input wire signed [WIDTH-1:0] angle, // Input angle.
+    output logic signed [WIDTH-1:0] cos, // Output cosine.
+    output logic signed [WIDTH-1:0] sin // Output sine.
 );
 
     localparam real PI = 3.14159265358979323846;
